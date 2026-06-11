@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Projeto Ruas – Triagem de Saúde</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <script>
+    tailwind.config = {
+      theme: { extend: { fontFamily: { sans: ['Nunito','sans-serif'], display: ['Sora','sans-serif'] } } }
+    };
+  </script>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header-bg p-4 text-white shadow-md sticky top-0 z-50">
+    <h1 class="text-xl font-bold font-display text-center">CADASTRO ÁGIL RUAS</h1>
+    <p class="text-xs text-center opacity-80">Triagem de Saúde & Bem-Estar</p>
+  </header>
+
+  <main class="p-4 max-w-md mx-auto space-y-6">
+    <form id="formTriagem" class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100 space-y-4">
+      
+      <div>
+        <label class="block text-sm font-bold text-emerald-900 mb-1">Nome Social do Assistido *</label>
+        <input type="text" id="nome" required class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Ex: João Batista">
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-bold text-emerald-900 mb-1">Idade</label>
+          <input type="number" id="idade" class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Anos">
+        </div>
+        <div>
+          <label class="block text-sm font-bold text-emerald-900 mb-1">Tempo de Rua</label>
+          <select id="tempoRua" class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition">
+            <option value="Menos de 6 meses">Menos de 6 meses</option>
+            <option value="6 meses a 1 ano">6 meses a 1 ano</option>
+            <option value="1 a 3 anos">1 a 3 anos</option>
+            <option value="Mais de 3 anos">Mais de 3 anos</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-bold text-emerald-900 mb-1">Queixa Principal / Sintomas</label>
+        <textarea id="queixa" rows="2" class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Descreva os sintomas ou dores relatadas..."></textarea>
+      </div>
+
+      <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-md">
+        Salvar Atendimento
+      </button>
+    </form>
+
+    <div id="listaRegistros" class="space-y-4 pb-10">
+      </div>
+  </main>
+
+  <script src="database.js"></script>
+  <script src="utils.js"></script>
+  <script src="ui.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
