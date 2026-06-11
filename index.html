@@ -3,68 +3,248 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Projeto Ruas – Triagem de Saúde</title>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <title>Projeto Ruas – Sistema de Gestão</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=Sora:wght@600;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     tailwind.config = {
       theme: { extend: { fontFamily: { sans: ['Nunito','sans-serif'], display: ['Sora','sans-serif'] } } }
     };
   </script>
-
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { background: #ecfdf5; min-height: 100vh; }
+    .header-bg { background: linear-gradient(135deg, #064e3b 0%, #047857 45%, #059669 100%); }
+    .view { display: none; }
+    .view.active { display: block; }
+  </style>
 </head>
 <body>
   <header class="header-bg p-4 text-white shadow-md sticky top-0 z-50">
-    <h1 class="text-xl font-bold font-display text-center">CADASTRO ÁGIL RUAS</h1>
-    <p class="text-xs text-center opacity-80">Triagem de Saúde & Bem-Estar</p>
+    <div class="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center">
+      <div>
+        <h1 class="text-xl font-bold font-display text-center md:text-left">CADASTRO ÁGIL RUAS</h1>
+        <p class="text-xs text-center md:text-left opacity-80" id="header-user-info">Gestão e Triagem</p>
+      </div>
+      <nav id="mainNav" class="hidden mt-3 md:mt-0 space-x-2 text-sm font-bold flex-wrap justify-center gap-y-2">
+        <button onclick="App.navigate('triagem')" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded">Nova Triagem</button>
+        <button id="nav-dashboard" onclick="App.navigate('dashboard')" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded hidden">Dashboard Analítico</button>
+        <button id="nav-formAdmin" onclick="App.navigate('formAdmin')" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded hidden">Formulários</button>
+        <button id="nav-userAdmin" onclick="App.navigate('userAdmin')" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded hidden">Usuários</button>
+        <button onclick="Auth.logout()" class="px-3 py-1 bg-red-500/80 hover:bg-red-600 rounded">Sair</button>
+      </nav>
+    </div>
   </header>
 
-  <main class="p-4 max-w-md mx-auto space-y-6">
-    <form id="formTriagem" class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100 space-y-4">
-      
-      <div>
-        <label class="block text-sm font-bold text-emerald-900 mb-1">Nome Social do Assistido *</label>
-        <input type="text" id="nome" required class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Ex: João Batista">
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
+  <main class="p-4 max-w-4xl mx-auto mt-4 pb-12">
+    
+    <div id="view-login" class="view active max-w-sm mx-auto bg-white p-6 rounded-xl shadow-sm border border-emerald-100">
+      <h2 class="text-lg font-bold text-emerald-900 mb-4 text-center">Acesso Seguro</h2>
+      <form id="formLogin" class="space-y-4">
         <div>
-          <label class="block text-sm font-bold text-emerald-900 mb-1">Idade</label>
-          <input type="number" id="idade" class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Anos">
+          <label class="block text-sm font-bold text-emerald-900 mb-1">Usuário</label>
+          <input type="text" id="loginUser" required class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none lowercase">
         </div>
         <div>
-          <label class="block text-sm font-bold text-emerald-900 mb-1">Tempo de Rua</label>
-          <select id="tempoRua" class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition">
-            <option value="Menos de 6 meses">Menos de 6 meses</option>
-            <option value="6 meses a 1 ano">6 meses a 1 ano</option>
-            <option value="1 a 3 anos">1 a 3 anos</option>
-            <option value="Mais de 3 anos">Mais de 3 anos</option>
+          <label class="block text-sm font-bold text-emerald-900 mb-1">Senha</label>
+          <input type="password" id="loginPass" required class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+        </div>
+        
+        <div class="flex items-center justify-between">
+          <label class="flex items-center text-sm text-emerald-900 font-bold cursor-pointer">
+            <input type="checkbox" id="loginRemember" class="mr-2 rounded text-emerald-600 focus:ring-emerald-500">
+            Lembrar acesso
+          </label>
+        </div>
+
+        <div id="loginError" class="text-red-600 bg-red-50 p-2 rounded text-sm hidden font-bold text-center border border-red-200"></div>
+        
+        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow-md transition">Entrar</button>
+      </form>
+    </div>
+
+    <div id="view-triagem" class="view max-w-md mx-auto">
+      <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Nova Triagem</h2>
+      
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100 mb-4">
+        <label class="block text-sm font-bold text-emerald-900 mb-2">Selecione o Perfil do Assistido:</label>
+        <select id="selectPerfilTriagem" class="w-full p-3 border border-emerald-300 bg-emerald-50 rounded-lg outline-none font-bold text-emerald-900">
+          <option value="adulto">🧑 Perfil Adulto</option>
+          <option value="crianca">🧒 Perfil Criança / Adolescente</option>
+        </select>
+      </div>
+
+      <form id="formTriagemDinamico" class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100 space-y-4">
+        <div id="dynamicFieldsContainer" class="space-y-4"></div>
+        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition shadow-md mt-4">Salvar Atendimento</button>
+      </form>
+    </div>
+
+    <div id="view-dashboard" class="view">
+      <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Dashboard Analítico Integrado</h2>
+      
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-xs font-bold text-emerald-900 mb-1">Buscar Paciente</label>
+          <input type="text" id="dashFilterText" placeholder="Nome, demanda..." class="w-full p-2 text-sm border border-gray-200 rounded outline-none focus:border-emerald-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-emerald-900 mb-1">Perfil</label>
+          <select id="dashFilterPerfil" class="w-full p-2 text-sm border border-gray-200 rounded outline-none">
+            <option value="todos">Todos os Perfis</option>
+            <option value="Perfil Adulto">🧑 Adultos</option>
+            <option value="Perfil Criança / Adolescente">🧒 Crianças/Adolescentes</option>
           </select>
         </div>
+        <div>
+          <label class="block text-xs font-bold text-emerald-900 mb-1">Nível de Urgência</label>
+          <select id="dashFilterUrgencia" class="w-full p-2 text-sm border border-gray-200 rounded outline-none">
+            <option value="todos">Todas</option>
+            <option value="ALTA">🚨 Alta</option>
+            <option value="MÉDIA">⚠️ Média</option>
+            <option value="BAIXA">✅ Baixa</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button onclick="Dashboard.render()" class="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold p-2 rounded transition">Aplicar Filtros</button>
+        </div>
       </div>
 
-      <div>
-        <label class="block text-sm font-bold text-emerald-900 mb-1">Queixa Principal / Sintomas</label>
-        <textarea id="queixa" rows="2" class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Descreva os sintomas ou dores relatadas..."></textarea>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-emerald-500">
+          <h3 class="text-xs font-bold text-gray-500 uppercase">Atendimentos (Total)</h3>
+          <p id="dashKpiTotal" class="text-2xl font-bold text-emerald-900">0</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-red-500">
+          <h3 class="text-xs font-bold text-gray-500 uppercase">Alta Urgência</h3>
+          <p id="dashKpiUrgencia" class="text-2xl font-bold text-red-600">0</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
+          <h3 class="text-xs font-bold text-gray-500 uppercase">Adultos Atendidos</h3>
+          <p id="dashKpiAdultos" class="text-2xl font-bold text-blue-900">0</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-purple-500">
+          <h3 class="text-xs font-bold text-gray-500 uppercase">Crianças Atendidas</h3>
+          <p id="dashKpiCriancas" class="text-2xl font-bold text-purple-900">0</p>
+        </div>
       </div>
 
-      <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-md">
-        Salvar Atendimento
-      </button>
-    </form>
-
-    <div id="listaRegistros" class="space-y-4 pb-10">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100">
+          <h3 class="font-bold text-emerald-900 mb-2 text-sm text-center">Distribuição por Perfil</h3>
+          <div class="relative h-48 w-full"><canvas id="chartPerfil"></canvas></div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100">
+          <h3 class="font-bold text-emerald-900 mb-2 text-sm text-center">Métricas de Urgência</h3>
+          <div class="relative h-48 w-full"><canvas id="chartUrgencia"></canvas></div>
+        </div>
       </div>
+      
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100">
+        <div class="flex justify-between items-center mb-4 border-b pb-2">
+          <h3 class="font-bold text-emerald-900">Registros de Pacientes</h3>
+          <span id="dashLabelExibindo" class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">Exibindo 0 registros</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-emerald-50 text-emerald-900 text-sm">
+                <th class="p-3 border-b">Data / Perfil</th>
+                <th class="p-3 border-b">Dados Dinâmicos Coletados</th>
+                <th class="p-3 border-b">Urgência</th>
+                <th class="p-3 border-b text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tabelaPacientes" class="text-sm text-gray-700"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-formAdmin" class="view max-w-2xl mx-auto">
+      <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Motor de Formulários por Perfil</h2>
+      
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100 mb-4">
+        <label class="block text-sm font-bold text-emerald-900 mb-2">Editar Formulário de:</label>
+        <select id="selectPerfilAdmin" class="w-full p-2 border border-emerald-300 bg-emerald-50 rounded-lg outline-none font-bold text-emerald-900">
+          <option value="adulto">🧑 Perfil Adulto</option>
+          <option value="crianca">🧒 Perfil Criança / Adolescente</option>
+        </select>
+      </div>
+
+      <form id="formAddField" class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100 space-y-4 mb-6">
+        <h3 class="font-bold text-emerald-800 border-b pb-2">Adicionar Novo Campo</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-bold mb-1">Título da Pergunta</label>
+            <input type="text" id="newFieldLabel" required class="w-full p-2 border border-gray-200 rounded-lg outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-bold mb-1">Tipo de Input</label>
+            <select id="newFieldType" required class="w-full p-2 border border-gray-200 rounded-lg outline-none">
+              <option value="text">Texto Curto</option>
+              <option value="textarea">Texto Longo (Área)</option>
+              <option value="number">Número</option>
+              <option value="select">Múltipla Escolha (Select)</option>
+            </select>
+          </div>
+        </div>
+        <div id="selectOptionsContainer" class="hidden">
+          <label class="block text-sm font-bold mb-1">Opções (Separadas por vírgula)</label>
+          <input type="text" id="newFieldOptions" placeholder="Ex: Sim, Não, Talvez" class="w-full p-2 border border-gray-200 rounded-lg outline-none">
+        </div>
+        <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg">Adicionar Campo ao Perfil</button>
+      </form>
+
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100">
+        <h3 class="font-bold text-emerald-800 border-b pb-2 mb-4">Schema Atual do Perfil</h3>
+        <ul id="schemaList" class="space-y-3"></ul>
+      </div>
+    </div>
+
+    <div id="view-userAdmin" class="view max-w-2xl mx-auto">
+      <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Gerenciamento de Usuários</h2>
+      
+      <form id="formAddUser" class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100 space-y-4 mb-6">
+        <h3 class="font-bold text-emerald-800 border-b pb-2">Adicionar Novo Usuário</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-bold mb-1">Nome de Usuário</label>
+            <input type="text" id="newUsername" required class="w-full p-2 border border-gray-200 rounded-lg outline-none lowercase">
+          </div>
+          <div>
+            <label class="block text-sm font-bold mb-1">Senha</label>
+            <input type="password" id="newUserPass" required class="w-full p-2 border border-gray-200 rounded-lg outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-bold mb-1">Nível de Acesso</label>
+            <select id="newUserRole" required class="w-full p-2 border border-gray-200 rounded-lg outline-none">
+              <option value="voluntario">Voluntário</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg">Criar Usuário</button>
+      </form>
+
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100">
+        <h3 class="font-bold text-emerald-800 border-b pb-2 mb-4">Usuários Cadastrados</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-emerald-50 text-emerald-900 text-sm">
+                <th class="p-3 border-b">Usuário</th>
+                <th class="p-3 border-b">Papel</th>
+                <th class="p-3 border-b text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tabelaUsuarios" class="text-sm text-gray-700"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </main>
-
-  <script src="database.js"></script>
-  <script src="utils.js"></script>
-  <script src="ui.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
