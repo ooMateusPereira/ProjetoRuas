@@ -24,10 +24,10 @@
     <div class="max-w-5xl mx-auto flex flex-wrap justify-between items-center">
       <div>
         <h1 class="text-xl font-bold font-display">CADASTRO ÁGIL RUAS</h1>
-        <p class="text-xs opacity-80" id="header-user-info">Gestão e Triagem</p>
+        <p class="text-xs opacity-80" id="header-user-info">Acesso Restrito</p>
       </div>
       
-      <button id="mobileMenuBtn" class="md:hidden text-white focus:outline-none p-2 bg-white/10 rounded">
+      <button id="mobileMenuBtn" class="md:hidden text-white focus:outline-none p-2 bg-white/10 rounded hidden">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
         </svg>
@@ -36,6 +36,7 @@
       <nav id="mainNav" class="hidden w-full md:w-auto md:flex flex-col md:flex-row mt-4 md:mt-0 space-y-2 md:space-y-0 md:space-x-2 text-sm font-bold">
         <button onclick="App.navigate('triagem')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Nova Triagem</button>
         <button onclick="App.navigate('cadastrados')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Pessoas Cadastradas</button>
+        <button onclick="App.navigate('tarefas')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Tarefas</button>
         <button onclick="App.navigate('dashboard')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Dashboard Analítico</button>
         <button onclick="App.navigate('financeiro')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Gestão Financeira/Materiais</button>
         <button onclick="App.navigate('formAdmin')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Editar Formulários</button>
@@ -55,7 +56,10 @@
         </div>
         <div>
           <label class="block text-sm font-bold mb-1">Senha</label>
-          <input type="password" id="loginPass" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+          <div class="relative flex items-center">
+            <input type="password" id="loginPass" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none pr-10">
+            <button type="button" onclick="Auth.togglePassword()" class="absolute right-3 text-gray-500 hover:text-emerald-800 text-lg focus:outline-none" title="Mostrar/Ocultar Senha">👁️</button>
+          </div>
         </div>
         <div class="flex items-center">
           <label class="flex items-center text-sm font-bold cursor-pointer">
@@ -125,6 +129,26 @@
       <div id="prontHistorico" class="space-y-4"></div>
     </div>
 
+    <div id="view-tarefas" class="view">
+      <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Tarefas e Log de Atividades</h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100">
+          <h3 class="font-bold text-emerald-800 border-b pb-2 mb-4">A Fazer (To-Do)</h3>
+          <form id="formTarefa" class="flex gap-2 mb-4">
+            <input type="text" id="novaTarefa" placeholder="Descreva a nova tarefa..." required class="w-full p-2 border rounded outline-none focus:border-emerald-500">
+            <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded shadow">Adicionar</button>
+          </form>
+          <ul id="listaTarefasPendentes" class="space-y-2"></ul>
+        </div>
+
+        <div class="bg-gray-50 p-5 rounded-xl shadow-sm border border-gray-200">
+          <h3 class="font-bold text-gray-700 border-b pb-2 mb-4">Atividades Realizadas (Log Histórico)</h3>
+          <ul id="listaTarefasConcluidas" class="space-y-2 text-sm text-gray-500 h-[400px] overflow-y-auto pr-2"></ul>
+        </div>
+      </div>
+    </div>
+
     <div id="view-dashboard" class="view">
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
         <h2 class="text-xl font-bold text-emerald-900 font-display">Dashboard Analítico</h2>
@@ -138,6 +162,15 @@
         </div>
       </div>
       
+      <div class="flex flex-col sm:flex-row justify-end gap-3 mb-6">
+        <button onclick="Dashboard.exportarParaExcel('download')" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-4 rounded-lg shadow text-sm flex items-center justify-center gap-2">
+          ⬇️ Baixar para o Dispositivo
+        </button>
+        <button onclick="Dashboard.exportarParaExcel('email')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow text-sm flex items-center justify-center gap-2">
+          ✉️ Enviar por E-mail
+        </button>
+      </div>
+
       <div id="containerFiltrosCruzados" class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 mb-6 space-y-3">
         <h3 class="text-xs font-bold text-emerald-900 uppercase tracking-wider border-b pb-1">Cruzamento de Dados & Filtros Combinados</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -180,12 +213,6 @@
           <h3 id="tituloGrafico2" class="font-bold text-emerald-900 mb-2 text-sm text-center">Métricas de Urgência</h3>
           <div class="relative h-48 w-full"><canvas id="chartUrgencia"></canvas></div>
         </div>
-      </div>
-
-      <div class="flex justify-end mb-4">
-        <button onclick="Dashboard.exportarParaExcel()" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-4 rounded-lg shadow text-sm flex items-center gap-1">
-          📊 Exportar Base Atual para o Excel
-        </button>
       </div>
     </div>
 

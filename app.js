@@ -1,38 +1,19 @@
-// Constantes e Bancos de Dados
+// Constantes e Chaves de Banco
 const PACIENTES_KEY = 'ruas_pacientes_db';
 const SCHEMA_KEY = 'form_schema_db';
+const FINANCEIRO_KEY = 'ruas_finance_db';
+const TAREFAS_KEY = 'ruas_tarefas_db'; // Novo Banco
 const LOCK_KEY = 'ruas_lockout_db'; 
 const SESSION_PERSIST_KEY = 'ruas_saved_session'; 
-const FINANCEIRO_KEY = 'ruas_finance_db';
 
 const defaultSchemas = {
-  'adulto': {
-    title: 'Perfil Adulto',
-    fields: [
-      { id: 'a_nome', label: 'Nome Social / Completo *', type: 'text' },
-      { id: 'a_idade', label: 'Idade', type: 'number' },
-      { id: 'a_tempo', label: 'Tempo de Situação de Rua', type: 'select', options: ['Menos de 6 meses', '6 meses a 1 ano', '1 a 5 anos', 'Mais de 5 anos'] },
-      { id: 'a_saude', label: 'Condições de Saúde / Uso de Substâncias', type: 'textarea' },
-      { id: 'a_demandas', label: 'Demandas do Atendimento Hoje', type: 'textarea' }
-    ]
-  },
-  'crianca': {
-    title: 'Perfil Criança / Adolescente',
-    fields: [
-      { id: 'c_nome', label: 'Nome da Criança/Adolescente *', type: 'text' },
-      { id: 'c_idade', label: 'Idade', type: 'number' },
-      { id: 'c_resp', label: 'Nome do Responsável Presente', type: 'text' },
-      { id: 'c_saude', label: 'Condição de Saúde, Sinais Físicos', type: 'textarea' }
-    ]
-  }
+  'adulto': { title: 'Perfil Adulto', fields: [{ id: 'a_nome', label: 'Nome Social / Completo *', type: 'text' }, { id: 'a_idade', label: 'Idade', type: 'number' }, { id: 'a_tempo', label: 'Tempo de Situação de Rua', type: 'select', options: ['Menos de 6 meses', '6 meses a 1 ano', '1 a 5 anos', 'Mais de 5 anos'] }, { id: 'a_saude', label: 'Condições de Saúde / Uso de Substâncias', type: 'textarea' }, { id: 'a_demandas', label: 'Demandas do Atendimento Hoje', type: 'textarea' }] },
+  'crianca': { title: 'Perfil Criança / Adolescente', fields: [{ id: 'c_nome', label: 'Nome da Criança/Adolescente *', type: 'text' }, { id: 'c_idade', label: 'Idade', type: 'number' }, { id: 'c_resp', label: 'Nome do Responsável Presente', type: 'text' }, { id: 'c_saude', label: 'Condição de Saúde, Sinais Físicos', type: 'textarea' }] }
 };
 
 const Utils = {
   generateId: () => 'id_' + Math.random().toString(36).substr(2, 9),
-  escapeHTML: (str) => {
-    if (!str) return '';
-    return str.toString().replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag]));
-  },
+  escapeHTML: (str) => { if (!str) return ''; return str.toString().replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag])); },
   calcUrgencia: (texto) => {
     const t = texto.toLowerCase();
     if (t.includes('dor no peito') || t.includes('sangramento') || t.includes('abuso') || t.includes('fome grave')) return 'ALTA';
@@ -47,7 +28,79 @@ const Utils = {
 };
 
 // ==========================================
-// 1. AUTENTICAÇÃO SEGURA
+// MÓDULO BACKEND (Comunicação com o Python)
+// ==========================================
+const Backend = {
+  cache: { [PACIENTES_KEY]: [], [SCHEMA_KEY]: null, [FINANCEIRO_KEY]: [], [TAREFAS_KEY]: [] },
+  init: async () => {
+    try {
+      const urls = [fetch(`/api/data/${PACIENTES_KEY}`), fetch(`/api/data/${SCHEMA_KEY}`), fetch(`/api/data/${FINANCEIRO_KEY}`), fetch(`/api/data/${TAREFAS_KEY}`)];
+      const [rPac, rSch, rFin, rTar] = await Promise.all(urls);
+      
+      const pac = await rPac.json(); if(pac) Backend.cache[PACIENTES_KEY] = pac;
+      const sch = await rSch.json(); if(sch) Backend.cache[SCHEMA_KEY] = sch;
+      const fin = await rFin.json(); if(fin) Backend.cache[FINANCEIRO_KEY] = fin;
+      const tar = await rTar.json(); if(tar) Backend.cache[TAREFAS_KEY] = tar;
+    } catch (e) { console.error("Falha ao conectar no backend. Tentando usar cache local.", e); }
+  },
+  get: (key) => Backend.cache[key],
+  save: (key, data) => {
+    Backend.cache[key] = data;
+    fetch(`/api/data/${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+      .catch(e => console.error("Erro ao salvar no servidor:", e));
+  }
+};
+
+// ==========================================
+// MÓDULO DE TAREFAS
+// ==========================================
+const Tarefas = {
+  getDB: () => Backend.get(TAREFAS_KEY) || [],
+  saveDB: (db) => Backend.save(TAREFAS_KEY, db),
+  init: () => document.getElementById('formTarefa').addEventListener('submit', Tarefas.add),
+  add: (e) => {
+    e.preventDefault();
+    const text = Utils.escapeHTML(document.getElementById('novaTarefa').value);
+    const db = Tarefas.getDB();
+    db.push({ id: Utils.generateId(), text, completed: false, date: new Date().toLocaleString('pt-BR'), user: App.currentUser.username });
+    Tarefas.saveDB(db); document.getElementById('formTarefa').reset(); Tarefas.render();
+  },
+  toggle: (id) => {
+    const db = Tarefas.getDB(); const t = db.find(x => x.id === id);
+    if(t) { t.completed = !t.completed; t.doneDate = t.completed ? new Date().toLocaleString('pt-BR') : null; Tarefas.saveDB(db); Tarefas.render(); }
+  },
+  delete: (id) => {
+    if(confirm('Apagar esta tarefa do sistema?')) { Tarefas.saveDB(Tarefas.getDB().filter(x => x.id !== id)); Tarefas.render(); }
+  },
+  render: () => {
+    const db = Tarefas.getDB(); let pendentes = ''; let concluidas = '';
+    // Mostra as mais recentes primeiro
+    [...db].reverse().forEach(t => {
+      if(!t.completed) {
+        pendentes += `<li class="flex justify-between items-center bg-white p-3 border border-emerald-200 rounded-lg shadow-sm">
+          <span class="font-bold text-gray-700">${t.text}</span>
+          <div class="flex gap-2">
+            <button onclick="Tarefas.toggle('${t.id}')" class="bg-green-100 text-green-700 hover:bg-green-200 px-2 py-1 rounded text-xs font-bold" title="Concluir">✓ Feito</button>
+            <button onclick="Tarefas.delete('${t.id}')" class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-xs font-bold">✕</button>
+          </div>
+        </li>`;
+      } else {
+        concluidas += `<li class="flex justify-between items-center bg-gray-100 p-3 border border-gray-200 rounded-lg">
+          <div><span class="line-through text-gray-500 font-bold">${t.text}</span><span class="text-[10px] block text-gray-400 mt-1">Concluída em: ${t.doneDate} por ${t.user}</span></div>
+          <div class="flex gap-2">
+            <button onclick="Tarefas.toggle('${t.id}')" class="text-blue-500 hover:underline text-xs font-bold">Desfazer</button>
+            <button onclick="Tarefas.delete('${t.id}')" class="text-red-400 hover:text-red-600 font-bold">✕</button>
+          </div>
+        </li>`;
+      }
+    });
+    document.getElementById('listaTarefasPendentes').innerHTML = pendentes || '<p class="text-sm text-gray-400 italic">Nenhuma tarefa pendente na fila.</p>';
+    document.getElementById('listaTarefasConcluidas').innerHTML = concluidas || '<p class="text-sm text-gray-400 italic">O log de atividades está vazio.</p>';
+  }
+};
+
+// ==========================================
+// AUTENTICAÇÃO
 // ==========================================
 const Auth = {
   maxAttempts: 3, lockTimeMs: 15 * 60000, timeoutTimer: null,
@@ -58,6 +111,10 @@ const Auth = {
     if (session) { App.currentUser = JSON.parse(session); App.startSession(); Auth.resetInactivityTimeout(); } else { App.navigate('login'); }
     window.addEventListener('mousemove', Auth.resetInactivityTimeout);
     window.addEventListener('keypress', Auth.resetInactivityTimeout);
+  },
+  togglePassword: () => {
+    const p = document.getElementById('loginPass');
+    p.type = p.type === 'password' ? 'text' : 'password';
   },
   resetInactivityTimeout: () => {
     clearTimeout(Auth.timeoutTimer);
@@ -72,8 +129,7 @@ const Auth = {
     let lock = lockDb[u] || { attempts: 0, lockedUntil: null };
 
     if (lock.lockedUntil && Date.now() < lock.lockedUntil) { 
-      const minLeft = Math.ceil((lock.lockedUntil - Date.now()) / 60000);
-      err.innerText = `🛡️ Bloqueado. Aguarde ${minLeft} min.`; err.classList.remove('hidden'); return; 
+      err.innerText = `🛡️ Bloqueado. Aguarde.`; err.classList.remove('hidden'); return; 
     }
     if (lock.lockedUntil && Date.now() > lock.lockedUntil) { lock.attempts = 0; lock.lockedUntil = null; }
 
@@ -94,12 +150,12 @@ const Auth = {
 };
 
 // ==========================================
-// 2. HISTÓRICO DE PRONTUÁRIOS
+// PRONTUÁRIOS
 // ==========================================
 const Prontuario = {
   pacienteAtual: null,
-  getPacientes: () => JSON.parse(localStorage.getItem(PACIENTES_KEY) || '[]'),
-  savePacientes: (db) => localStorage.setItem(PACIENTES_KEY, JSON.stringify(db)),
+  getPacientes: () => Backend.get(PACIENTES_KEY),
+  savePacientes: (db) => Backend.save(PACIENTES_KEY, db),
   init: () => {
     document.getElementById('formTriagemDinamico').addEventListener('submit', Prontuario.salvarAtendimento);
     document.getElementById('selectPerfilTriagem').addEventListener('change', FormEngine.renderTriagemForm);
@@ -107,60 +163,38 @@ const Prontuario = {
   },
   salvarAtendimento: (e) => {
     e.preventDefault();
-    const pChave = document.getElementById('selectPerfilTriagem').value;
-    const schemas = FormEngine.getSchemas();
-    const fields = schemas[pChave].fields;
-    
+    const pChave = document.getElementById('selectPerfilTriagem').value; const schemas = FormEngine.getSchemas(); const fields = schemas[pChave].fields;
     let respostas = {}; let rawText = ''; let nomePrincipal = 'Não Identificado';
     fields.forEach(f => {
-      const val = Utils.escapeHTML(document.getElementById(f.id).value);
-      respostas[f.label] = val;
-      rawText += val + ' ';
+      const val = Utils.escapeHTML(document.getElementById(f.id).value); respostas[f.label] = val; rawText += val + ' ';
       if(f.label.toLowerCase().includes('nome')) nomePrincipal = val;
     });
-
     const urgencia = Utils.calcUrgencia(rawText);
     const novoAtend = { id: Utils.generateId(), dataStr: new Date().toLocaleString('pt-BR'), respostas, urgencia };
-    let db = Prontuario.getPacientes();
-    const editPacId = document.getElementById('editPacienteId').value;
-    const editAtendId = document.getElementById('editAtendimentoId').value;
+    let db = Prontuario.getPacientes(); const editPacId = document.getElementById('editPacienteId').value; const editAtendId = document.getElementById('editAtendimentoId').value;
 
     if (editPacId) {
       const pacIndex = db.findIndex(p => p.id === editPacId);
       if (editAtendId) {
         const atIndex = db[pacIndex].historico.findIndex(a => a.id === editAtendId);
         db[pacIndex].historico[atIndex] = { ...db[pacIndex].historico[atIndex], respostas, urgencia };
-        db[pacIndex].nome = nomePrincipal;
-        alert('Registro atualizado com sucesso!');
-      } else {
-        db[pacIndex].historico.push(novoAtend);
-        alert('Evolução adicionada ao prontuário!');
-      }
+        db[pacIndex].nome = nomePrincipal; alert('Registro atualizado com sucesso!');
+      } else { db[pacIndex].historico.push(novoAtend); alert('Evolução adicionada ao prontuário!'); }
     } else {
       db.push({ id: Utils.generateId(), nome: nomePrincipal, perfil: schemas[pChave].title, perfilChave: pChave, historico: [novoAtend] });
-      alert('Paciente cadastrado com sucesso!');
+      alert('Paciente cadastrado permanentemente!');
     }
     Prontuario.savePacientes(db); Prontuario.fecharEdicao();
     if(editPacId && !editAtendId) Prontuario.abrirProntuario(editPacId); else App.navigate('cadastrados');
   },
   iniciarNovoAtendimento: () => {
     if(!Prontuario.pacienteAtual) return;
-    document.getElementById('editPacienteId').value = Prontuario.pacienteAtual.id;
-    document.getElementById('editAtendimentoId').value = '';
+    document.getElementById('editPacienteId').value = Prontuario.pacienteAtual.id; document.getElementById('editAtendimentoId').value = '';
     document.getElementById('triagemTitle').innerText = `Evolução de Prontuário: ${Prontuario.pacienteAtual.nome}`;
-    document.getElementById('seletorPerfilContainer').classList.add('hidden');
-    document.getElementById('selectPerfilTriagem').value = Prontuario.pacienteAtual.perfilChave;
+    document.getElementById('seletorPerfilContainer').classList.add('hidden'); document.getElementById('selectPerfilTriagem').value = Prontuario.pacienteAtual.perfilChave;
     FormEngine.renderTriagemForm();
-    
     const fields = FormEngine.getSchemas()[Prontuario.pacienteAtual.perfilChave].fields;
-    setTimeout(() => {
-      fields.forEach(f => {
-        if(f.label.toLowerCase().includes('nome') && document.getElementById(f.id)) {
-          document.getElementById(f.id).value = Prontuario.pacienteAtual.nome;
-          document.getElementById(f.id).readOnly = true; document.getElementById(f.id).classList.add('bg-gray-100');
-        }
-      });
-    }, 100);
+    setTimeout(() => { fields.forEach(f => { if(f.label.toLowerCase().includes('nome') && document.getElementById(f.id)) { document.getElementById(f.id).value = Prontuario.pacienteAtual.nome; document.getElementById(f.id).readOnly = true; document.getElementById(f.id).classList.add('bg-gray-100'); } }); }, 100);
     document.getElementById('btnCancelEdit').classList.remove('hidden'); App.navigate('triagem');
   },
   editarAtendimento: (pacienteId, atendimentoId) => {
@@ -170,14 +204,11 @@ const Prontuario = {
     document.getElementById('seletorPerfilContainer').classList.add('hidden'); document.getElementById('selectPerfilTriagem').value = pac.perfilChave;
     FormEngine.renderTriagemForm();
     const fields = FormEngine.getSchemas()[pac.perfilChave].fields;
-    setTimeout(() => {
-      fields.forEach(f => { if(atend.respostas[f.label] && document.getElementById(f.id)) document.getElementById(f.id).value = atend.respostas[f.label]; });
-    }, 100);
+    setTimeout(() => { fields.forEach(f => { if(atend.respostas[f.label] && document.getElementById(f.id)) document.getElementById(f.id).value = atend.respostas[f.label]; }); }, 100);
     document.getElementById('btnCancelEdit').classList.remove('hidden'); App.navigate('triagem');
   },
   fecharEdicao: () => {
-    document.getElementById('formTriagemDinamico').reset();
-    document.getElementById('editPacienteId').value = ''; document.getElementById('editAtendimentoId').value = '';
+    document.getElementById('formTriagemDinamico').reset(); document.getElementById('editPacienteId').value = ''; document.getElementById('editAtendimentoId').value = '';
     document.getElementById('triagemTitle').innerText = 'Nova Triagem';
     document.getElementById('seletorPerfilContainer').classList.remove('hidden'); document.getElementById('btnCancelEdit').classList.add('hidden');
     FormEngine.renderTriagemForm(); if(Prontuario.pacienteAtual && document.getElementById('view-prontuario').classList.contains('active')) App.navigate('prontuario');
@@ -188,10 +219,8 @@ const Prontuario = {
     const histHtml = pac.historico.slice().reverse().map(a => {
       const resHtml = Object.entries(a.respostas).map(([c, v]) => `<div class="text-sm"><span class="font-bold">${c}:</span> ${v}</div>`).join('');
       return `<div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <div class="flex justify-between items-center mb-2 border-b pb-2"><span class="font-bold text-gray-700">Data da Ação: ${a.dataStr.split(' ')[0]}</span>
-            <div><span class="${Utils.obterCorUrgencia(a.urgencia)} text-xs mr-2">${a.urgencia}</span>
-              <button onclick="Prontuario.editarAtendimento('${pac.id}', '${a.id}')" class="text-blue-500 hover:text-blue-700 text-xs font-bold">Editar Ficha</button>
-            </div>
+          <div class="flex justify-between items-center mb-2 border-b pb-2"><span class="font-bold text-gray-700">Data: ${a.dataStr.split(' ')[0]}</span>
+            <div><span class="${Utils.obterCorUrgencia(a.urgencia)} text-xs mr-2">${a.urgencia}</span><button onclick="Prontuario.editarAtendimento('${pac.id}', '${a.id}')" class="text-blue-500 hover:text-blue-700 text-xs font-bold">Editar Ficha</button></div>
           </div><div class="space-y-1">${resHtml}</div></div>`;
     }).join('');
     document.getElementById('prontHistorico').innerHTML = histHtml; App.navigate('prontuario');
@@ -205,254 +234,135 @@ const Prontuario = {
           <td class="p-3 font-bold">${p.nome} <br><span class="text-xs text-gray-500 font-normal">${p.perfil}</span></td>
           <td class="p-3 text-xs">${ultimoAtend.dataStr.split(' ')[0]} <br><span class="${Utils.obterCorUrgencia(ultimoAtend.urgencia)} text-[10px]">${ultimoAtend.urgencia}</span></td>
           <td class="p-3 text-center font-bold text-gray-600">${numAtend}</td>
-          <td class="p-3 text-center space-x-2">
-            <button onclick="Prontuario.abrirProntuario('${p.id}')" class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold hover:bg-blue-200">Ver Prontuário</button>
-            <button onclick="Prontuario.deletarPaciente('${p.id}')" class="text-red-500 hover:underline text-xs font-bold">Excluir</button>
-          </td></tr>`;
+          <td class="p-3 text-center space-x-2"><button onclick="Prontuario.abrirProntuario('${p.id}')" class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold hover:bg-blue-200">Ver Prontuário</button><button onclick="Prontuario.deletarPaciente('${p.id}')" class="text-red-500 hover:underline text-xs font-bold">Excluir</button></td></tr>`;
     });
-    document.getElementById('tabelaPacientes').innerHTML = html || '<tr><td colspan="4" class="p-4 text-center">Nenhum paciente cadastrado encontrado.</td></tr>';
+    document.getElementById('tabelaPacientes').innerHTML = html || '<tr><td colspan="4" class="p-4 text-center">Nenhum paciente cadastrado.</td></tr>';
   },
-  deletarPaciente: (id) => { if(confirm('Apagar todo o histórico deste assistido?')) { Prontuario.savePacientes(Prontuario.getPacientes().filter(p => p.id !== id)); Prontuario.renderListaCadastrados(); } }
+  deletarPaciente: (id) => { if(confirm('Apagar permanentemente do servidor?')) { Prontuario.savePacientes(Prontuario.getPacientes().filter(p => p.id !== id)); Prontuario.renderListaCadastrados(); } }
 };
 
 // ==========================================
-// 3. DASHBOARD COM FILTROS CRUZADOS E EXPORTADOR
+// DASHBOARD E EXPORTAÇÃO
 // ==========================================
 const Dashboard = {
   charts: { perfil: null, urgencia: null },
   contextoAtual: 'triagens',
-
   alterarContexto: (novoContexto) => {
-    Dashboard.contextoAtual = novoContexto;
-    const isTriagem = novoContexto === 'triagens';
-    
-    document.getElementById('containerKpisTriagem').classList.toggle('hidden', !isTriagem);
-    document.getElementById('containerKpisEconomia').classList.toggle('hidden', isTriagem);
-    document.getElementById('containerFiltrosCruzados').classList.toggle('hidden', !isTriagem); // Filtros só fazem sentido em triagem
-    
-    document.getElementById('tituloGrafico1').innerText = isTriagem ? "Distribuição por Perfil" : "Fluxo Financeiro Mensal (R$)";
-    document.getElementById('tituloGrafico2').innerText = isTriagem ? "Métricas de Urgência" : "Distribuição de Despesas por Tipo";
-
+    Dashboard.contextoAtual = novoContexto; const isTriagem = novoContexto === 'triagens';
+    document.getElementById('containerKpisTriagem').classList.toggle('hidden', !isTriagem); document.getElementById('containerKpisEconomia').classList.toggle('hidden', isTriagem); document.getElementById('containerFiltrosCruzados').classList.toggle('hidden', !isTriagem);
+    document.getElementById('tituloGrafico1').innerText = isTriagem ? "Distribuição por Perfil" : "Fluxo Financeiro"; document.getElementById('tituloGrafico2').innerText = isTriagem ? "Métricas de Urgência" : "Distribuição de Despesas";
     Dashboard.render();
   },
-
   render: () => {
-    if (Dashboard.contextoAtual === 'economias') {
-      Dashboard.renderEconomia();
-      return;
-    }
+    if (Dashboard.contextoAtual === 'economias') return Dashboard.renderEconomia();
+    const db = Prontuario.getPacientes(); const perfisMarcados = Array.from(document.querySelectorAll('.chk-filtro-perfil:checked')).map(el => el.value); const urgenciasMarcadas = Array.from(document.querySelectorAll('.chk-filtro-urgencia:checked')).map(el => el.value);
+    let totalAtend = 0; let kpiUrg = 0; let qtdAdulto = 0; let qtdCrianca = 0; let distUrgencia = { 'ALTA': 0, 'MÉDIA': 0, 'BAIXA': 0 };
 
-    // LÓGICA DE FILTROS CRUZADOS (CHECKBOXES) PARA TRIAGENS
-    const db = Prontuario.getPacientes();
-    const perfisMarcados = Array.from(document.querySelectorAll('.chk-filtro-perfil:checked')).map(el => el.value);
-    const urgenciasMarcadas = Array.from(document.querySelectorAll('.chk-filtro-urgencia:checked')).map(el => el.value);
-
-    let totalAtendimentos = 0; let kpiUrg = 0;
-    let qtdAdulto = 0; let qtdCrianca = 0;
-    let distUrgencia = { 'ALTA': 0, 'MÉDIA': 0, 'BAIXA': 0 };
-
-    // Filtragem cruzada inteligente
-    const pacientesFiltrados = db.filter(p => {
-      const matchPerfil = perfisMarcados.length === 0 || perfisMarcados.includes(p.perfilChave);
-      const lastAtend = p.historico[p.historico.length - 1];
-      const matchUrgencia = urgenciasMarcadas.length === 0 || urgenciasMarcadas.includes(lastAtend.urgencia);
-      return matchPerfil && matchUrgencia;
+    const filtrados = db.filter(p => {
+      const matchP = perfisMarcados.length === 0 || perfisMarcados.includes(p.perfilChave);
+      const matchU = urgenciasMarcadas.length === 0 || urgenciasMarcadas.includes(p.historico[p.historico.length - 1].urgencia);
+      return matchP && matchU;
     });
 
-    pacientesFiltrados.forEach(p => {
-      totalAtendimentos += p.historico.length;
-      if(p.perfilChave === 'adulto') qtdAdulto++;
-      if(p.perfilChave === 'crianca') qtdCrianca++;
-      
-      const last = p.historico[p.historico.length - 1];
-      if(last.urgencia === 'ALTA') kpiUrg++;
-      distUrgencia[last.urgencia]++;
+    filtrados.forEach(p => {
+      totalAtend += p.historico.length;
+      if(p.perfilChave === 'adulto') qtdAdulto++; if(p.perfilChave === 'crianca') qtdCrianca++;
+      const last = p.historico[p.historico.length - 1]; if(last.urgencia === 'ALTA') kpiUrg++; distUrgencia[last.urgencia]++;
     });
 
-    document.getElementById('dashKpiTotal').innerText = pacientesFiltrados.length;
-    document.getElementById('dashKpiAtend').innerText = totalAtendimentos;
-    document.getElementById('dashKpiUrgencia').innerText = kpiUrg;
-
+    document.getElementById('dashKpiTotal').innerText = filtrados.length; document.getElementById('dashKpiAtend').innerText = totalAtend; document.getElementById('dashKpiUrgencia').innerText = kpiUrg;
     Dashboard.renderChartsTriagem(qtdAdulto, qtdCrianca, distUrgencia);
   },
-
   renderChartsTriagem: (adultos, criancas, urgencias) => {
-    const ctxP = document.getElementById('chartPerfil').getContext('2d');
-    const ctxU = document.getElementById('chartUrgencia').getContext('2d');
-
-    if (Dashboard.charts.perfil) Dashboard.charts.perfil.destroy();
-    if (Dashboard.charts.urgencia) Dashboard.charts.urgencia.destroy();
-
-    Dashboard.charts.perfil = new Chart(ctxP, {
-      type: 'doughnut',
-      data: { labels: ['Adultos', 'Crianças'], datasets: [{ data: [adultos, criancas], backgroundColor: ['#3b82f6', '#a855f7'], borderWidth: 0 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-    });
-
-    Dashboard.charts.urgencia = new Chart(ctxU, {
-      type: 'bar',
-      data: { labels: ['ALTA', 'MÉDIA', 'BAIXA'], datasets: [{ label: 'Casos', data: [urgencias['ALTA'], urgencias['MÉDIA'], urgencias['BAIXA']], backgroundColor: ['#ef4444', '#eab308', '#22c55e'], borderRadius: 4 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-    });
+    const ctxP = document.getElementById('chartPerfil').getContext('2d'); const ctxU = document.getElementById('chartUrgencia').getContext('2d');
+    if (Dashboard.charts.perfil) Dashboard.charts.perfil.destroy(); if (Dashboard.charts.urgencia) Dashboard.charts.urgencia.destroy();
+    Dashboard.charts.perfil = new Chart(ctxP, { type: 'doughnut', data: { labels: ['Adultos', 'Crianças'], datasets: [{ data: [adultos, criancas], backgroundColor: ['#3b82f6', '#a855f7'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
+    Dashboard.charts.urgencia = new Chart(ctxU, { type: 'bar', data: { labels: ['ALTA', 'MÉDIA', 'BAIXA'], datasets: [{ label: 'Casos', data: [urgencias['ALTA'], urgencias['MÉDIA'], urgencias['BAIXA']], backgroundColor: ['#ef4444', '#eab308', '#22c55e'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
   },
-
   renderEconomia: () => {
-    const db = Financeiro.getDB();
-    let caixa = 0; let previsto = 0; let materiais = 0;
-    let somaRenda = 0; let somaGasto = 0;
-
-    db.forEach(r => {
-      if(r.tipo === 'renda') { caixa += r.valor; somaRenda += r.valor; }
-      else if(r.tipo === 'gasto') { caixa -= r.valor; somaGasto += r.valor; }
-      else if(r.tipo === 'futuro') { previsto += r.valor; }
-      else if(r.tipo === 'material') { materiais += r.valor; }
-    });
-
-    document.getElementById('dashKpiCaixa').innerText = caixa.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
-    document.getElementById('dashKpiPrevisto').innerText = previsto.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
-    document.getElementById('dashKpiMateriais').innerText = `${materiais} un.`;
-
-    // Renderiza Gráficos Econômicos
-    const ctxP = document.getElementById('chartPerfil').getContext('2d');
-    const ctxU = document.getElementById('chartUrgencia').getContext('2d');
-
-    if (Dashboard.charts.perfil) Dashboard.charts.perfil.destroy();
-    if (Dashboard.charts.urgencia) Dashboard.charts.urgencia.destroy();
-
-    Dashboard.charts.perfil = new Chart(ctxP, {
-      type: 'bar',
-      data: { labels: ['Arrecadado (+)', 'Gasto Realizado (-)'], datasets: [{ data: [somaRenda, somaGasto], backgroundColor: ['#10b981', '#ef4444'], borderRadius: 4 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-    });
-
-    Dashboard.charts.urgencia = new Chart(ctxU, {
-      type: 'doughnut',
-      data: { labels: ['Previsões Futuras', 'Insumos Utilizados'], datasets: [{ data: [previsto, materiais], backgroundColor: ['#f59e0b', '#3b82f6'], borderWidth: 0 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-    });
+    const db = Financeiro.getDB(); let cx = 0; let pv = 0; let mat = 0; let sr = 0; let sg = 0;
+    db.forEach(r => { if(r.tipo === 'renda') { cx += r.valor; sr += r.valor; } else if(r.tipo === 'gasto') { cx -= r.valor; sg += r.valor; } else if(r.tipo === 'futuro') pv += r.valor; else mat += r.valor; });
+    document.getElementById('dashKpiCaixa').innerText = cx.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); document.getElementById('dashKpiPrevisto').innerText = pv.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); document.getElementById('dashKpiMateriais').innerText = `${mat} un.`;
+    const ctxP = document.getElementById('chartPerfil').getContext('2d'); const ctxU = document.getElementById('chartUrgencia').getContext('2d');
+    if (Dashboard.charts.perfil) Dashboard.charts.perfil.destroy(); if (Dashboard.charts.urgencia) Dashboard.charts.urgencia.destroy();
+    Dashboard.charts.perfil = new Chart(ctxP, { type: 'bar', data: { labels: ['Arrecadado', 'Gasto Realizado'], datasets: [{ data: [sr, sg], backgroundColor: ['#10b981', '#ef4444'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+    Dashboard.charts.urgencia = new Chart(ctxU, { type: 'doughnut', data: { labels: ['Previsões Futuras', 'Insumos Utilizados'], datasets: [{ data: [pv, mat], backgroundColor: ['#f59e0b', '#3b82f6'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
   },
-
-  exportarParaExcel: () => {
-    let csvContent = "\uFEFF"; // Garante acentuação correta no Excel em português
-    
+  exportarParaExcel: (acao) => {
+    let csv = "\uFEFF"; let filename = "";
     if (Dashboard.contextoAtual === 'economias') {
-      const db = Financeiro.getDB();
-      csvContent += "Data;Tipo;Descrição;Valor ou Qtd;Registrado Por\n";
-      db.forEach(r => {
-        csvContent += `${r.data};${r.tipo.toUpperCase()};${r.desc};${r.valor};${r.user}\n`;
-      });
-      Dashboard.dispararDownload(csvContent, "balanco_financeiro_ruas.csv");
+      filename = "balanco_ruas.csv"; csv += "Data;Tipo;Descrição;Valor ou Qtd;Registrado Por\n"; Financeiro.getDB().forEach(r => csv += `${r.data};${r.tipo.toUpperCase()};${r.desc};${r.valor};${r.user}\n`);
     } else {
-      const db = Prontuario.getPacientes();
-      csvContent += "Nome do Assistido;Perfil Coletado;Data do Registro;Nível de Urgência;Evolução Clínica e Social\n";
-      db.forEach(p => {
-        p.historico.forEach(h => {
-          const respostasCombinadas = Object.entries(h.respostas).map(([label, val]) => `${label}: ${val}`).join(' | ');
-          csvContent += `${p.nome};${p.perfil};${h.dataStr};${h.urgencia};${respostasCombinadas}\n`;
-        });
-      });
-      Dashboard.dispararDownload(csvContent, "base_triagens_ruas.csv");
+      filename = "base_pacientes_ruas.csv"; csv += "Nome do Assistido;Perfil;Data;Urgência;Evolução\n"; Prontuario.getPacientes().forEach(p => p.historico.forEach(h => { const res = Object.entries(h.respostas).map(([l, v]) => `${l}: ${v}`).join(' | '); csv += `${p.nome};${p.perfil};${h.dataStr};${h.urgencia};${res}\n`; }));
+    }
+    
+    // Faz o download da base gerada independente da ação
+    Dashboard.dispararDownload(csv, filename);
+
+    // Se o usuário clicou em 'Email', abre o cliente de e-mail com a instrução para anexar
+    if(acao === 'email') {
+      const assunto = encodeURIComponent(`Relatório Oficial: ${filename}`);
+      const corpo = encodeURIComponent(`Olá equipe,\n\nSegue em anexo o relatório exportado diretamente do sistema do Projeto Ruas.\n\n(Importante: Lembre-se de anexar o arquivo '${filename}' que acabou de ser baixado no seu dispositivo antes de enviar este e-mail).\n\nAtenciosamente,\nSistema de Gestão - Projeto Ruas`);
+      window.location.href = `mailto:?subject=${assunto}&body=${corpo}`;
     }
   },
-
-  dispararDownload: (content, filename) => {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob); link.setAttribute("download", filename);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
-  }
+  dispararDownload: (content, filename) => { const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.setAttribute("download", filename); document.body.appendChild(link); link.click(); document.body.removeChild(link); }
 };
 
-// ==========================================
-// 4. LOGÍSTICA E FINANÇAS
-// ==========================================
 const Financeiro = {
-  getDB: () => JSON.parse(localStorage.getItem(FINANCEIRO_KEY) || '[]'),
-  saveDB: (db) => localStorage.setItem(FINANCEIRO_KEY, JSON.stringify(db)),
+  getDB: () => Backend.get(FINANCEIRO_KEY), saveDB: (db) => Backend.save(FINANCEIRO_KEY, db),
   init: () => document.getElementById('formFinanceiro').addEventListener('submit', Financeiro.salvarRegistro),
   salvarRegistro: (e) => {
-    e.preventDefault();
-    const r = {
-      id: Utils.generateId(), data: new Date().toLocaleString('pt-BR'),
-      tipo: document.getElementById('finTipo').value, desc: Utils.escapeHTML(document.getElementById('finDesc').value),
-      valor: parseFloat(document.getElementById('finValor').value), user: App.currentUser.username
-    };
-    const db = Financeiro.getDB(); db.push(r); Financeiro.saveDB(db);
-    document.getElementById('formFinanceiro').reset(); Financeiro.render();
+    e.preventDefault(); const r = { id: Utils.generateId(), data: new Date().toLocaleString('pt-BR'), tipo: document.getElementById('finTipo').value, desc: Utils.escapeHTML(document.getElementById('finDesc').value), valor: parseFloat(document.getElementById('finValor').value), user: App.currentUser.username };
+    const db = Financeiro.getDB(); db.push(r); Financeiro.saveDB(db); document.getElementById('formFinanceiro').reset(); Financeiro.render();
   },
   render: () => {
-    const db = Financeiro.getDB().slice().reverse(); let caixa = 0; let previsto = 0; let html = '';
+    const db = Financeiro.getDB().slice().reverse(); let cx = 0; let pv = 0; let html = '';
     db.forEach(r => {
       let cor = 'text-gray-600'; let sinal = ''; let valFormat = r.valor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
-      if(r.tipo === 'renda') { caixa += r.valor; cor = 'text-green-600'; sinal = '+'; }
-      else if(r.tipo === 'gasto') { caixa -= r.valor; cor = 'text-red-600'; sinal = '-'; }
-      else if(r.tipo === 'futuro') { previsto += r.valor; cor = 'text-yellow-600'; }
-      else if(r.tipo === 'material') { cor = 'text-blue-600'; valFormat = `${r.valor} un.`; }
-      html += `<li class="flex justify-between items-center p-2 border-b">
-        <div><span class="font-bold ${cor}">${r.desc}</span> <span class="text-[10px] text-gray-400 block">${r.data.split(' ')[0]}</span></div>
-        <div class="font-bold ${cor}">${sinal}${valFormat}</div></li>`;
+      if(r.tipo === 'renda') { cx += r.valor; cor = 'text-green-600'; sinal = '+'; } else if(r.tipo === 'gasto') { cx -= r.valor; cor = 'text-red-600'; sinal = '-'; } else if(r.tipo === 'futuro') { pv += r.valor; cor = 'text-yellow-600'; } else if(r.tipo === 'material') { cor = 'text-blue-600'; valFormat = `${r.valor} un.`; }
+      html += `<li class="flex justify-between items-center p-2 border-b"><div><span class="font-bold ${cor}">${r.desc}</span> <span class="text-[10px] text-gray-400 block">${r.data.split(' ')[0]}</span></div><div class="font-bold ${cor}">${sinal}${valFormat}</div></li>`;
     });
-    document.getElementById('listaFinanceiro').innerHTML = html || '<p class="text-center text-gray-400 mt-4">Nenhum registro.</p>';
-    document.getElementById('finCaixa').innerText = caixa.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
-    document.getElementById('finPrevisto').innerText = previsto.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+    document.getElementById('listaFinanceiro').innerHTML = html || '<p class="text-center text-gray-400 mt-4">Nenhum registro.</p>'; document.getElementById('finCaixa').innerText = cx.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); document.getElementById('finPrevisto').innerText = pv.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
   }
 };
 
-// ==========================================
-// 5. MOTOR DE FORMULÁRIOS DINÂMICOS
-// ==========================================
 const FormEngine = {
-  getSchemas: () => JSON.parse(localStorage.getItem(SCHEMA_KEY)) || defaultSchemas,
-  saveSchemas: (s) => localStorage.setItem(SCHEMA_KEY, JSON.stringify(s)),
+  getSchemas: () => Backend.get(SCHEMA_KEY) || defaultSchemas, saveSchemas: (s) => Backend.save(SCHEMA_KEY, s),
   initAdmin: () => {
     const ts = document.getElementById('newFieldType'); const oc = document.getElementById('selectOptionsContainer');
     document.getElementById('selectPerfilAdmin').addEventListener('change', FormEngine.renderSchemaList);
     ts.addEventListener('change', (e) => e.target.value === 'select' ? oc.classList.remove('hidden') : oc.classList.add('hidden'));
     document.getElementById('formAddField').addEventListener('submit', (e) => {
-      e.preventDefault(); const p = document.getElementById('selectPerfilAdmin').value;
-      const nf = { id: Utils.generateId(), label: Utils.escapeHTML(document.getElementById('newFieldLabel').value), type: ts.value };
+      e.preventDefault(); const p = document.getElementById('selectPerfilAdmin').value; const nf = { id: Utils.generateId(), label: Utils.escapeHTML(document.getElementById('newFieldLabel').value), type: ts.value };
       if(ts.value === 'select') nf.options = document.getElementById('newFieldOptions').value.split(',').map(o=>Utils.escapeHTML(o.trim())).filter(Boolean);
-      const s = FormEngine.getSchemas(); s[p].fields.push(nf); FormEngine.saveSchemas(s);
-      document.getElementById('formAddField').reset(); oc.classList.add('hidden'); FormEngine.renderSchemaList(); FormEngine.renderTriagemForm();
+      const s = FormEngine.getSchemas(); s[p].fields.push(nf); FormEngine.saveSchemas(s); document.getElementById('formAddField').reset(); oc.classList.add('hidden'); FormEngine.renderSchemaList(); FormEngine.renderTriagemForm();
     });
   },
-  renderSchemaList: () => {
-    const p = document.getElementById('selectPerfilAdmin').value;
-    document.getElementById('schemaList').innerHTML = FormEngine.getSchemas()[p].fields.map((f, i) => `
-      <li class="flex justify-between items-center p-3 bg-gray-50 border rounded-lg">
-        <div><span class="font-bold">${Utils.escapeHTML(f.label)}</span> <span class="text-xs bg-gray-200 px-2 rounded">${f.type}</span></div>
-        <button onclick="FormEngine.deleteField('${p}', ${i})" class="text-red-500 font-bold px-2 text-sm">Excluir</button>
-      </li>`).join('');
-  },
+  renderSchemaList: () => { const p = document.getElementById('selectPerfilAdmin').value; document.getElementById('schemaList').innerHTML = FormEngine.getSchemas()[p].fields.map((f, i) => `<li class="flex justify-between items-center p-3 bg-gray-50 border rounded-lg"><div><span class="font-bold">${Utils.escapeHTML(f.label)}</span> <span class="text-xs bg-gray-200 px-2 rounded">${f.type}</span></div><button onclick="FormEngine.deleteField('${p}', ${i})" class="text-red-500 font-bold px-2 text-sm">Excluir</button></li>`).join(''); },
   deleteField: (p, i) => { const s = FormEngine.getSchemas(); s[p].fields.splice(i, 1); FormEngine.saveSchemas(s); FormEngine.renderSchemaList(); FormEngine.renderTriagemForm(); },
   renderTriagemForm: () => {
     const p = document.getElementById('selectPerfilTriagem').value;
     document.getElementById('dynamicFieldsContainer').innerHTML = FormEngine.getSchemas()[p].fields.map(f => {
       let h = ''; const b = "w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white";
-      if(f.type==='textarea') h = `<textarea id="${f.id}" rows="2" class="${b}" required></textarea>`;
-      else if(f.type==='select') h = `<select id="${f.id}" class="${b}">${(f.options||[]).map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
-      else h = `<input type="${f.type}" id="${f.id}" class="${b}" required>`;
+      if(f.type==='textarea') h = `<textarea id="${f.id}" rows="2" class="${b}" required></textarea>`; else if(f.type==='select') h = `<select id="${f.id}" class="${b}">${(f.options||[]).map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`; else h = `<input type="${f.type}" id="${f.id}" class="${b}" required>`;
       return `<div><label class="block text-sm font-bold text-emerald-900 mb-1">${Utils.escapeHTML(f.label)}</label>${h}</div>`;
     }).join('');
   }
 };
 
-// ==========================================
-// 6. CONTROLADOR DE ROTAS DA SPA
-// ==========================================
 const App = {
   currentUser: null,
-  init: () => {
-    if(!localStorage.getItem(SCHEMA_KEY)) FormEngine.saveSchemas(defaultSchemas);
-    document.getElementById('mobileMenuBtn').addEventListener('click', () => {
-      const nav = document.getElementById('mainNav'); nav.classList.toggle('hidden'); nav.classList.toggle('flex');
-    });
-    FormEngine.initAdmin(); Prontuario.init(); Financeiro.init(); Auth.init();
+  init: async () => {
+    await Backend.init(); if(!Backend.get(SCHEMA_KEY)) Backend.save(SCHEMA_KEY, defaultSchemas);
+    document.getElementById('mobileMenuBtn').addEventListener('click', () => { const nav = document.getElementById('mainNav'); nav.classList.toggle('hidden'); nav.classList.toggle('flex'); });
+    FormEngine.initAdmin(); Prontuario.init(); Financeiro.init(); Tarefas.init(); Auth.init();
   },
   startSession: () => {
-    document.getElementById('mainNav').classList.remove('hidden');
+    document.getElementById('mainNav').classList.remove('hidden'); 
+    document.getElementById('mobileMenuBtn').classList.remove('hidden');
     document.getElementById('header-user-info').innerText = `Operador: ${Utils.escapeHTML(App.currentUser.username.toUpperCase())}`;
-    FormEngine.renderSchemaList(); Financeiro.render(); Prontuario.renderListaCadastrados(); FormEngine.renderTriagemForm();
+    FormEngine.renderSchemaList(); Financeiro.render(); Prontuario.renderListaCadastrados(); FormEngine.renderTriagemForm(); Tarefas.render();
     App.navigate('triagem');
   },
   navigate: (viewId) => {
@@ -460,15 +370,25 @@ const App = {
     if(App.currentUser && viewId === 'login') return App.navigate('triagem');
     
     const nav = document.getElementById('mainNav');
-    if(window.innerWidth < 768) { nav.classList.add('hidden'); nav.classList.remove('flex'); }
-    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+    const menuBtn = document.getElementById('mobileMenuBtn');
+    
+    // Oculta completamente o menu se estiver na tela de login
+    if (viewId === 'login') {
+      nav.classList.add('hidden');
+      menuBtn.classList.add('hidden');
+      document.getElementById('header-user-info').innerText = 'Acesso Restrito';
+    }
+
+    if(window.innerWidth < 768 && viewId !== 'login') { nav.classList.add('hidden'); nav.classList.remove('flex'); }
+    
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active')); 
     document.getElementById(`view-${viewId}`).classList.add('active');
     
-    // GATILHO COMPLEMENTAR DE CORREÇÃO DO BUG:
     if (viewId === 'triagem') FormEngine.renderTriagemForm();
     if (viewId === 'cadastrados') Prontuario.renderListaCadastrados();
     if (viewId === 'dashboard') { setTimeout(() => Dashboard.render(), 100); }
     if (viewId === 'financeiro') Financeiro.render();
+    if (viewId === 'tarefas') Tarefas.render();
     window.scrollTo(0, 0);
   }
 };
