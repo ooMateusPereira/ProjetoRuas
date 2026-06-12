@@ -18,6 +18,8 @@
     .view { display: none; }
     .view.active { display: block; }
     .eye-icon { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+    /* CLASSE NOVA: Bloqueio absoluto para garantir que não apareça antes do login */
+    .force-hidden { display: none !important; }
   </style>
 </head>
 <body>
@@ -28,13 +30,13 @@
         <p class="text-xs opacity-80" id="header-user-info">Acesso Restrito</p>
       </div>
       
-      <button id="mobileMenuBtn" class="md:hidden text-white focus:outline-none p-2 bg-white/10 rounded hidden">
+      <button id="mobileMenuBtn" class="force-hidden md:hidden text-white focus:outline-none p-2 bg-white/10 rounded">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
         </svg>
       </button>
 
-      <nav id="mainNav" class="hidden w-full md:w-auto md:flex flex-col md:flex-row mt-4 md:mt-0 space-y-2 md:space-y-0 md:space-x-2 text-sm font-bold">
+      <nav id="mainNav" class="force-hidden hidden w-full md:w-auto md:flex flex-col md:flex-row mt-4 md:mt-0 space-y-2 md:space-y-0 md:space-x-2 text-sm font-bold">
         <button onclick="App.navigate('triagem')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Nova Triagem</button>
         <button onclick="App.navigate('cadastrados')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Pessoas Cadastradas</button>
         <button onclick="App.navigate('tarefas')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Tarefas</button>

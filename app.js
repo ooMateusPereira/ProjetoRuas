@@ -137,7 +137,7 @@ const Auth = {
   },
   resetInactivityTimeout: () => {
     clearTimeout(Auth.timeoutTimer);
-    if (App.currentUser) Auth.timeoutTimer = setTimeout(() => { alert("Sessão expirada por inatividade."); Auth.logout(); }, 30 * 60000);
+    if (App.currentUser) Auth.timeoutTimer = setTimeout(() => { Utils.notify("Sessão expirada por inatividade", "erro"); Auth.logout(); }, 30 * 60000);
   },
   handleLogin: (e) => {
     e.preventDefault();
@@ -389,12 +389,24 @@ const App = {
   currentUser: null,
   init: async () => {
     await Backend.init(); if(!Backend.get(SCHEMA_KEY)) Backend.save(SCHEMA_KEY, defaultSchemas);
-    document.getElementById('mobileMenuBtn').addEventListener('click', () => { const nav = document.getElementById('mainNav'); nav.classList.toggle('hidden'); nav.classList.toggle('flex'); });
+    
+    // Função do Menu Mobile Atualizada
+    document.getElementById('mobileMenuBtn').addEventListener('click', () => { 
+      const nav = document.getElementById('mainNav'); 
+      nav.classList.toggle('hidden'); 
+      nav.classList.toggle('flex'); 
+    });
+    
     FormEngine.initAdmin(); Prontuario.init(); Financeiro.init(); Tarefas.init(); Auth.init();
   },
   startSession: () => {
-    document.getElementById('mainNav').classList.remove('hidden'); 
-    document.getElementById('mobileMenuBtn').classList.remove('hidden');
+    const nav = document.getElementById('mainNav');
+    const menuBtn = document.getElementById('mobileMenuBtn');
+    
+    // Remove o bloqueio absoluto de ocultação após o login
+    nav.classList.remove('force-hidden');
+    menuBtn.classList.remove('force-hidden');
+    
     document.getElementById('header-user-info').innerText = `Operador: ${Utils.escapeHTML(App.currentUser.username.toUpperCase())}`;
     FormEngine.renderSchemaList(); Financeiro.render(); Prontuario.renderListaCadastrados(); FormEngine.renderTriagemForm(); Tarefas.render();
     App.navigate('triagem');
@@ -406,10 +418,14 @@ const App = {
     const nav = document.getElementById('mainNav');
     const menuBtn = document.getElementById('mobileMenuBtn');
     
+    // Na tela de login, aplica a classe que oculta o menu impiedosamente
     if (viewId === 'login') {
-      nav.classList.add('hidden');
-      menuBtn.classList.add('hidden');
+      nav.classList.add('force-hidden');
+      menuBtn.classList.add('force-hidden');
       document.getElementById('header-user-info').innerText = 'Acesso Restrito';
+    } else {
+      nav.classList.remove('force-hidden');
+      menuBtn.classList.remove('force-hidden');
     }
 
     if(window.innerWidth < 768 && viewId !== 'login') { nav.classList.add('hidden'); nav.classList.remove('flex'); }
