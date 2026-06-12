@@ -1,10 +1,9 @@
 // Constantes e Bancos de Dados
-const PACIENTES_KEY = 'ruas_pacientes_db'; // Nova estrutura de dados
+const PACIENTES_KEY = 'ruas_pacientes_db';
 const SCHEMA_KEY = 'form_schema_db';
-const USERS_KEY = 'ruas_users_db';
 const LOCK_KEY = 'ruas_lockout_db'; 
 const SESSION_PERSIST_KEY = 'ruas_saved_session'; 
-const FINANCEIRO_KEY = 'ruas_finance_db'; // DB Financeiro/Materiais
+const FINANCEIRO_KEY = 'ruas_finance_db';
 
 const defaultSchemas = {
   'adulto': {
@@ -48,56 +47,86 @@ const Utils = {
 };
 
 // ==========================================
-// 1. AUTENTICAÇÃO E NAVEGAÇÃO
+// 1. AUTENTICAÇÃO SEGURA (USUÁRIO ÚNICO)
 // ==========================================
 const Auth = {
-  maxAttempts: 3, lockTimeMs: 15 * 60000, timeoutTimer: null,
-  getUsers: () => JSON.parse(localStorage.getItem(USERS_KEY) || JSON.stringify({'admin':{pass:'ProjetoR@uas26',role:'admin'},'voluntario':{pass:'ruas123',role:'voluntario'}})),
-  saveUsers: (obj) => localStorage.setItem(USERS_KEY, JSON.stringify(obj)),
+  maxAttempts: 3, 
+  lockTimeMs: 15 * 60000, 
+  timeoutTimer: null,
+  credential: { user: 'voluntario', pass: 'Projeto@Voluntario26' },
+
   init: () => {
-    if(!localStorage.getItem(USERS_KEY)) Auth.saveUsers(Auth.getUsers());
     document.getElementById('formLogin').addEventListener('submit', Auth.handleLogin);
     const session = sessionStorage.getItem('ruas_session') || localStorage.getItem(SESSION_PERSIST_KEY);
-    if (session) { App.currentUser = JSON.parse(session); App.startSession(); Auth.resetInactivityTimeout(); } else { App.navigate('login'); }
+    if (session) { 
+      App.currentUser = JSON.parse(session); 
+      App.startSession(); 
+      Auth.resetInactivityTimeout(); 
+    } else { 
+      App.navigate('login'); 
+    }
     window.addEventListener('mousemove', Auth.resetInactivityTimeout);
     window.addEventListener('keypress', Auth.resetInactivityTimeout);
   },
+
   resetInactivityTimeout: () => {
     clearTimeout(Auth.timeoutTimer);
-    if (App.currentUser) Auth.timeoutTimer = setTimeout(() => { alert("Sessão expirada."); Auth.logout(); }, 30 * 60000);
+    if (App.currentUser) Auth.timeoutTimer = setTimeout(() => { alert("Sessão expirada por inatividade."); Auth.logout(); }, 30 * 60000);
   },
+
   handleLogin: (e) => {
     e.preventDefault();
     const u = Utils.escapeHTML(document.getElementById('loginUser').value.toLowerCase().trim());
     const p = document.getElementById('loginPass').value;
     const err = document.getElementById('loginError');
-    const db = Auth.getUsers();
+    
     let lockDb = JSON.parse(localStorage.getItem(LOCK_KEY) || '{}');
     let lock = lockDb[u] || { attempts: 0, lockedUntil: null };
 
-    if (lock.lockedUntil && Date.now() < lock.lockedUntil) { err.innerText = `Bloqueado. Aguarde.`; err.classList.remove('hidden'); return; }
+    if (lock.lockedUntil && Date.now() < lock.lockedUntil) { 
+      const minLeft = Math.ceil((lock.lockedUntil - Date.now()) / 60000);
+      err.innerText = `🛡️ Bloqueado por força bruta. Aguarde ${minLeft} min.`; 
+      err.classList.remove('hidden'); 
+      return; 
+    }
+    
     if (lock.lockedUntil && Date.now() > lock.lockedUntil) { lock.attempts = 0; lock.lockedUntil = null; }
 
-    if (db[u] && db[u].pass === p) {
-      err.classList.add('hidden'); lock.attempts = 0; lockDb[u] = lock; localStorage.setItem(LOCK_KEY, JSON.stringify(lockDb));
-      App.currentUser = { username: u, role: db[u].role };
+    if (u === Auth.credential.user && p === Auth.credential.pass) {
+      err.classList.add('hidden'); 
+      lock.attempts = 0; 
+      lockDb[u] = lock; 
+      localStorage.setItem(LOCK_KEY, JSON.stringify(lockDb));
+      
+      App.currentUser = { username: u };
       sessionStorage.setItem('ruas_session', JSON.stringify(App.currentUser));
       if(document.getElementById('loginRemember').checked) localStorage.setItem(SESSION_PERSIST_KEY, JSON.stringify(App.currentUser));
-      document.getElementById('formLogin').reset(); App.startSession(); Auth.resetInactivityTimeout();
+      
+      document.getElementById('formLogin').reset(); 
+      App.startSession(); 
+      Auth.resetInactivityTimeout();
     } else {
       lock.attempts += 1;
       if (lock.attempts >= Auth.maxAttempts) lock.lockedUntil = Date.now() + Auth.lockTimeMs;
-      err.innerText = "Credenciais inválidas!"; lockDb[u] = lock; localStorage.setItem(LOCK_KEY, JSON.stringify(lockDb)); err.classList.remove('hidden');
+      err.innerText = `Credenciais inválidas! Tentativas restantes: ${Auth.maxAttempts - lock.attempts}`; 
+      lockDb[u] = lock; 
+      localStorage.setItem(LOCK_KEY, JSON.stringify(lockDb)); 
+      err.classList.remove('hidden');
     }
   },
-  logout: () => { sessionStorage.removeItem('ruas_session'); localStorage.removeItem(SESSION_PERSIST_KEY); App.currentUser = null; App.navigate('login'); }
+  logout: () => { 
+    sessionStorage.removeItem('ruas_session'); 
+    localStorage.removeItem(SESSION_PERSIST_KEY); 
+    App.currentUser = null; 
+    App.navigate('login'); 
+  }
 };
 
 // ==========================================
-// 2. PRONTUÁRIOS, TRIAGEM E EDIÇÃO
+// 2. HISTÓRICO DE PRONTUÁRIOS E ATENDIMENTOS
 // ==========================================
 const Prontuario = {
-  pacienteAtual: null, // Guarda o ID do paciente sendo editado/visto
+  pacienteAtual: null,
 
   getPacientes: () => JSON.parse(localStorage.getItem(PACIENTES_KEY) || '[]'),
   savePacientes: (db) => localStorage.setItem(PACIENTES_KEY, JSON.stringify(db)),
@@ -105,7 +134,7 @@ const Prontuario = {
   init: () => {
     document.getElementById('formTriagemDinamico').addEventListener('submit', Prontuario.salvarAtendimento);
     document.getElementById('selectPerfilTriagem').addEventListener('change', FormEngine.renderTriagemForm);
-    document.getElementById('dashFilterText').addEventListener('keyup', Prontuario.renderDashboard);
+    document.getElementById('dashFilterText').addEventListener('keyup', Prontuario.renderListaCadastrados);
   },
 
   salvarAtendimento: (e) => {
@@ -114,7 +143,6 @@ const Prontuario = {
     const schemas = FormEngine.getSchemas();
     const fields = schemas[pChave].fields;
     
-    // Captura os dados do form
     let respostas = {}; let rawText = ''; let nomePrincipal = 'Não Identificado';
     fields.forEach(f => {
       const val = Utils.escapeHTML(document.getElementById(f.id).value);
@@ -124,28 +152,24 @@ const Prontuario = {
     });
 
     const urgencia = Utils.calcUrgencia(rawText);
-    const novoAtend = { id: Utils.generateId(), dataStr: new Date().toLocaleString('pt-BR'), respostas, urgencia, resp_tecnico: App.currentUser.username };
+    const novoAtend = { id: Utils.generateId(), dataStr: new Date().toLocaleString('pt-BR'), respostas, urgencia };
     
     let db = Prontuario.getPacientes();
     const editPacId = document.getElementById('editPacienteId').value;
     const editAtendId = document.getElementById('editAtendimentoId').value;
 
     if (editPacId) {
-      // Estamos editando ou adicionando à um paciente existente
       const pacIndex = db.findIndex(p => p.id === editPacId);
       if (editAtendId) {
-        // EDIÇÃO DE UM ATENDIMENTO ESPECÍFICO
         const atIndex = db[pacIndex].historico.findIndex(a => a.id === editAtendId);
         db[pacIndex].historico[atIndex] = { ...db[pacIndex].historico[atIndex], respostas, urgencia };
-        db[pacIndex].nome = nomePrincipal; // Atualiza o nome base caso tenha corrigido
+        db[pacIndex].nome = nomePrincipal;
         alert('Registro atualizado com sucesso!');
       } else {
-        // NOVO ATENDIMENTO PARA O MESMO PACIENTE
         db[pacIndex].historico.push(novoAtend);
-        alert('Nova evolução adicionada ao prontuário!');
+        alert('Evolução adicionada ao prontuário!');
       }
     } else {
-      // PACIENTE INÉDITO (Primeira Triagem)
       db.push({
         id: Utils.generateId(),
         nome: nomePrincipal,
@@ -157,25 +181,21 @@ const Prontuario = {
     }
 
     Prontuario.savePacientes(db);
-    Prontuario.fecharEdicao(); // Limpa e volta
-    if(App.currentUser.role === 'admin') {
-      if(editPacId && !editAtendId) Prontuario.abrirProntuario(editPacId); // Volta para o prontuário
-      else App.navigate('dashboard');
-    }
+    Prontuario.fecharEdicao();
+    if(editPacId && !editAtendId) Prontuario.abrirProntuario(editPacId);
+    else App.navigate('cadastrados');
   },
 
-  // Inicia form em branco para Nova Consulta de paciente existente
   iniciarNovoAtendimento: () => {
     if(!Prontuario.pacienteAtual) return;
     document.getElementById('editPacienteId').value = Prontuario.pacienteAtual.id;
-    document.getElementById('editAtendimentoId').value = ''; // Vazio = Novo Registro
-    document.getElementById('triagemTitle').innerText = `Adicionando Evolução: ${Prontuario.pacienteAtual.nome}`;
+    document.getElementById('editAtendimentoId').value = '';
+    document.getElementById('triagemTitle').innerText = `Evolução de Prontuário: ${Prontuario.pacienteAtual.nome}`;
     
-    document.getElementById('seletorPerfilContainer').classList.add('hidden'); // Trava no mesmo perfil
+    document.getElementById('seletorPerfilContainer').classList.add('hidden');
     document.getElementById('selectPerfilTriagem').value = Prontuario.pacienteAtual.perfilChave;
     FormEngine.renderTriagemForm();
     
-    // Tenta preencher o campo nome automaticamente
     const fields = FormEngine.getSchemas()[Prontuario.pacienteAtual.perfilChave].fields;
     setTimeout(() => {
       fields.forEach(f => {
@@ -191,7 +211,6 @@ const Prontuario = {
     App.navigate('triagem');
   },
 
-  // Abre form com dados existentes para alterar
   editarAtendimento: (pacienteId, atendimentoId) => {
     const db = Prontuario.getPacientes();
     const pac = db.find(p => p.id === pacienteId);
@@ -199,13 +218,12 @@ const Prontuario = {
     
     document.getElementById('editPacienteId').value = pac.id;
     document.getElementById('editAtendimentoId').value = atend.id;
-    document.getElementById('triagemTitle').innerText = `Editando Registro de: ${pac.nome}`;
+    document.getElementById('triagemTitle').innerText = `Corrigir Ficha de: ${pac.nome}`;
     
     document.getElementById('seletorPerfilContainer').classList.add('hidden');
     document.getElementById('selectPerfilTriagem').value = pac.perfilChave;
-    FormEngine.renderTriagemForm(); // Renderiza os campos
+    FormEngine.renderTriagemForm();
 
-    // Popula os campos dinâmicos com as respostas salvas
     const fields = FormEngine.getSchemas()[pac.perfilChave].fields;
     setTimeout(() => {
       fields.forEach(f => {
@@ -223,7 +241,7 @@ const Prontuario = {
     document.getElementById('formTriagemDinamico').reset();
     document.getElementById('editPacienteId').value = '';
     document.getElementById('editAtendimentoId').value = '';
-    document.getElementById('triagemTitle').innerText = 'Nova Triagem (Paciente Inédito)';
+    document.getElementById('triagemTitle').innerText = 'Nova Triagem';
     document.getElementById('seletorPerfilContainer').classList.remove('hidden');
     document.getElementById('btnCancelEdit').classList.add('hidden');
     FormEngine.renderTriagemForm();
@@ -238,19 +256,18 @@ const Prontuario = {
     document.getElementById('prontNome').innerText = pac.nome;
     document.getElementById('prontPerfil').innerText = pac.perfil;
     
-    const histHtml = pac.historico.slice().reverse().map((a, i) => {
+    const histHtml = pac.historico.slice().reverse().map(a => {
       const resHtml = Object.entries(a.respostas).map(([c, v]) => `<div class="text-sm"><span class="font-bold">${c}:</span> ${v}</div>`).join('');
       return `
         <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
           <div class="flex justify-between items-center mb-2 border-b pb-2">
-            <span class="font-bold text-gray-700">Data: ${a.dataStr.split(' ')[0]}</span>
+            <span class="font-bold text-gray-700">Data da Ação: ${a.dataStr.split(' ')[0]}</span>
             <div>
               <span class="${Utils.obterCorUrgencia(a.urgencia)} text-xs mr-2">${a.urgencia}</span>
               <button onclick="Prontuario.editarAtendimento('${pac.id}', '${a.id}')" class="text-blue-500 hover:text-blue-700 text-xs font-bold">Editar Ficha</button>
             </div>
           </div>
           <div class="space-y-1">${resHtml}</div>
-          <div class="text-xs text-gray-400 mt-2 text-right">Registrado por: ${a.resp_tecnico || 'Sistema'}</div>
         </div>
       `;
     }).join('');
@@ -259,19 +276,16 @@ const Prontuario = {
     App.navigate('prontuario');
   },
 
-  renderDashboard: () => {
+  renderListaCadastrados: () => {
     const db = Prontuario.getPacientes();
     const termo = document.getElementById('dashFilterText').value.toLowerCase();
-    
-    let html = ''; let totalAtend = 0; let kpiUrg = 0;
+    let html = '';
     
     const filtrados = db.filter(p => p.nome.toLowerCase().includes(termo)).reverse();
 
     filtrados.forEach(p => {
       const numAtend = p.historico.length;
-      totalAtend += numAtend;
-      const ultimoAtend = p.historico[numAtend - 1]; // O último do array
-      if(ultimoAtend.urgencia === 'ALTA') kpiUrg++;
+      const ultimoAtend = p.historico[numAtend - 1];
 
       html += `
         <tr class="border-b hover:bg-emerald-50">
@@ -285,72 +299,105 @@ const Prontuario = {
         </tr>`;
     });
 
-    document.getElementById('tabelaPacientes').innerHTML = html || '<tr><td colspan="4" class="p-4 text-center">Nenhum paciente.</td></tr>';
-    document.getElementById('dashKpiTotal').innerText = filtrados.length;
-    document.getElementById('dashKpiAtend').innerText = totalAtend;
-    document.getElementById('dashKpiUrgencia').innerText = kpiUrg;
+    document.getElementById('tabelaPacientes').innerHTML = html || '<tr><td colspan="4" class="p-4 text-center">Nenhum paciente cadastrado encontrado.</td></tr>';
   },
 
   deletarPaciente: (id) => {
-    if(confirm('Isso apagará o paciente e TODO o histórico de atendimentos dele. Confirmar?')) {
-      let db = Prontuario.getPacientes();
-      Prontuario.savePacientes(db.filter(p => p.id !== id));
-      Prontuario.renderDashboard();
+    if(confirm('Apagar todo o histórico médico e social deste assistido?')) {
+      Prontuario.savePacientes(Prontuario.getPacientes().filter(p => p.id !== id));
+      Prontuario.renderListaCadastrados();
     }
   }
 };
 
 // ==========================================
-// 3. MÓDULO FINANCEIRO E MATERIAIS
+// 3. DASHBOARD METRIFICADO (CHART.JS)
+// ==========================================
+const Dashboard = {
+  charts: { perfil: null, urgencia: null },
+
+  render: () => {
+    const db = Prontuario.getPacientes();
+    
+    let totalAtendimentos = 0; let kpiUrg = 0;
+    let qtdAdulto = 0; let qtdCrianca = 0;
+    let distUrgencia = { 'ALTA': 0, 'MÉDIA': 0, 'BAIXA': 0 };
+
+    db.forEach(p => {
+      totalAtendimentos += p.historico.length;
+      if(p.perfilChave === 'adulto') qtdAdulto++;
+      if(p.perfilChave === 'crianca') qtdCrianca++;
+      
+      const last = p.historico[p.historico.length - 1];
+      if(last.urgencia === 'ALTA') kpiUrg++;
+      distUrgencia[last.urgencia]++;
+    });
+
+    document.getElementById('dashKpiTotal').innerText = db.length;
+    document.getElementById('dashKpiAtend').innerText = totalAtendimentos;
+    document.getElementById('dashKpiUrgencia').innerText = kpiUrg;
+
+    const ctxP = document.getElementById('chartPerfil').getContext('2d');
+    const ctxU = document.getElementById('chartUrgencia').getContext('2d');
+
+    if (Dashboard.charts.perfil) Dashboard.charts.perfil.destroy();
+    if (Dashboard.charts.urgencia) Dashboard.charts.urgencia.destroy();
+
+    Dashboard.charts.perfil = new Chart(ctxP, {
+      type: 'doughnut',
+      data: { labels: ['Adultos', 'Crianças'], datasets: [{ data: [qtdAdulto, qtdCrianca], backgroundColor: ['#3b82f6', '#a855f7'], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    Dashboard.charts.urgencia = new Chart(ctxU, {
+      type: 'bar',
+      data: { labels: ['ALTA', 'MÉDIA', 'BAIXA'], datasets: [{ label: 'Casos Ativos', data: [distUrgencia['ALTA'], distUrgencia['MÉDIA'], distUrgencia['BAIXA']], backgroundColor: ['#ef4444', '#eab308', '#22c55e'], borderRadius: 4 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+  }
+};
+
+// ==========================================
+// 4. LOGÍSTICA E GESTÃO FINANCEIRA
 // ==========================================
 const Financeiro = {
   getDB: () => JSON.parse(localStorage.getItem(FINANCEIRO_KEY) || '[]'),
   saveDB: (db) => localStorage.setItem(FINANCEIRO_KEY, JSON.stringify(db)),
-  
   init: () => document.getElementById('formFinanceiro').addEventListener('submit', Financeiro.salvarRegistro),
-  
   salvarRegistro: (e) => {
     e.preventDefault();
-    const novo = {
-      id: Utils.generateId(),
-      data: new Date().toLocaleString('pt-BR'),
+    const r = {
+      id: Utils.generateId(), data: new Date().toLocaleString('pt-BR'),
       tipo: document.getElementById('finTipo').value,
       desc: Utils.escapeHTML(document.getElementById('finDesc').value),
       valor: parseFloat(document.getElementById('finValor').value),
       user: App.currentUser.username
     };
-    const db = Financeiro.getDB(); db.push(novo); Financeiro.saveDB(db);
-    document.getElementById('formFinanceiro').reset();
-    Financeiro.render();
+    const db = Financeiro.getDB(); db.push(r); Financeiro.saveDB(db);
+    document.getElementById('formFinanceiro').reset(); Financeiro.render();
   },
-
   render: () => {
-    const db = Financeiro.getDB().slice().reverse(); // Mais novos primeiro
+    const db = Financeiro.getDB().slice().reverse();
     let caixa = 0; let previsto = 0; let html = '';
-    
     db.forEach(r => {
       let cor = 'text-gray-600'; let sinal = ''; let valFormat = r.valor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
-      
       if(r.tipo === 'renda') { caixa += r.valor; cor = 'text-green-600'; sinal = '+'; }
       else if(r.tipo === 'gasto') { caixa -= r.valor; cor = 'text-red-600'; sinal = '-'; }
       else if(r.tipo === 'futuro') { previsto += r.valor; cor = 'text-yellow-600'; }
-      else if(r.tipo === 'material') { cor = 'text-blue-600'; valFormat = `${r.valor} un.`; } // Materiais
-      
-      html += `
-        <li class="flex justify-between items-center p-2 border-b">
-          <div><span class="font-bold ${cor}">${r.desc}</span> <span class="text-[10px] text-gray-400 block">${r.data.split(' ')[0]} - por ${r.user}</span></div>
-          <div class="font-bold ${cor}">${sinal}${valFormat}</div>
-        </li>`;
+      else if(r.tipo === 'material') { cor = 'text-blue-600'; valFormat = `${r.valor} un.`; }
+      html += `<li class="flex justify-between items-center p-2 border-b">
+        <div><span class="font-bold ${cor}">${r.desc}</span> <span class="text-[10px] text-gray-400 block">${r.data.split(' ')[0]}</span></div>
+        <div class="font-bold ${cor}">${sinal}${valFormat}</div>
+      </li>`;
     });
-
-    document.getElementById('listaFinanceiro').innerHTML = html || '<p class="text-center text-gray-400 mt-4">Nenhum registro.</p>';
+    document.getElementById('listaFinanceiro').innerHTML = html || '<p class="text-center text-gray-400 mt-4">Nenhum registro contábil.</p>';
     document.getElementById('finCaixa').innerText = caixa.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
     document.getElementById('finPrevisto').innerText = previsto.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
   }
 };
 
 // ==========================================
-// 4. MOTOR DE FORMULÁRIOS DINÂMICOS (ADMIN)
+// 5. MOTOR DE FORMULÁRIOS DINÂMICOS
 // ==========================================
 const FormEngine = {
   getSchemas: () => JSON.parse(localStorage.getItem(SCHEMA_KEY)) || defaultSchemas,
@@ -389,14 +436,13 @@ const FormEngine = {
 };
 
 // ==========================================
-// 5. CONTROLADOR PRINCIPAL (APP)
+// 6. CONTROLADOR DE ROTAS DA SPA
 // ==========================================
 const App = {
   currentUser: null,
   init: () => {
     if(!localStorage.getItem(SCHEMA_KEY)) FormEngine.saveSchemas(defaultSchemas);
     
-    // Controle do Menu Hambúrguer (Mobile)
     document.getElementById('mobileMenuBtn').addEventListener('click', () => {
       const nav = document.getElementById('mainNav');
       nav.classList.toggle('hidden'); nav.classList.toggle('flex');
@@ -406,33 +452,26 @@ const App = {
   },
   startSession: () => {
     document.getElementById('mainNav').classList.remove('hidden');
-    document.getElementById('header-user-info').innerText = `${Utils.escapeHTML(App.currentUser.username.toUpperCase())} | ${App.currentUser.role.toUpperCase()}`;
-    
-    const admin = App.currentUser.role === 'admin';
-    document.getElementById('nav-dashboard').classList.toggle('hidden', !admin);
-    document.getElementById('nav-financeiro').classList.toggle('hidden', !admin);
-    document.getElementById('nav-formAdmin').classList.toggle('hidden', !admin);
-    document.getElementById('nav-userAdmin').classList.toggle('hidden', !admin);
-    
-    Prontuario.fecharEdicao(); // Prepara form limpo
-    if(admin) { FormEngine.renderSchemaList(); Financeiro.render(); Prontuario.renderDashboard(); }
+    document.getElementById('header-user-info').innerText = `Operador: ${Utils.escapeHTML(App.currentUser.username.toUpperCase())}`;
+    FormEngine.renderSchemaList(); 
+    Financeiro.render(); 
+    Prontuario.renderListaCadastrados();
     App.navigate('triagem');
   },
   navigate: (viewId) => {
     if(!App.currentUser && viewId !== 'login') return App.navigate('login');
     if(App.currentUser && viewId === 'login') return App.navigate('triagem');
-    if(App.currentUser?.role === 'voluntario' && viewId !== 'triagem') return App.navigate('triagem');
     
-    // Fecha o menu mobile ao navegar
     const nav = document.getElementById('mainNav');
     if(window.innerWidth < 768) { nav.classList.add('hidden'); nav.classList.remove('flex'); }
 
     document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
     document.getElementById(`view-${viewId}`).classList.add('active');
     
-    if (viewId === 'dashboard') Prontuario.renderDashboard();
+    if (viewId === 'cadastrados') Prontuario.renderListaCadastrados();
+    if (viewId === 'dashboard') { setTimeout(() => Dashboard.render(), 100); }
     if (viewId === 'financeiro') Financeiro.render();
-    window.scrollTo(0, 0); // Sobe a página ao trocar de aba
+    window.scrollTo(0, 0);
   }
 };
 
