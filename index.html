@@ -13,10 +13,11 @@
     };
   </script>
   <style>
-    body { background: #ecfdf5; min-height: 100vh; }
+    body { background: #ecfdf5; min-height: 100vh; overflow-x: hidden; }
     .header-bg { background: linear-gradient(135deg, #064e3b 0%, #047857 45%, #059669 100%); }
     .view { display: none; }
     .view.active { display: block; }
+    .eye-icon { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -58,7 +59,7 @@
           <label class="block text-sm font-bold mb-1">Senha</label>
           <div class="relative flex items-center">
             <input type="password" id="loginPass" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none pr-10">
-            <button type="button" onclick="Auth.togglePassword()" class="absolute right-3 text-gray-500 hover:text-emerald-800 text-lg focus:outline-none" title="Mostrar/Ocultar Senha">👁️</button>
+            <button type="button" onclick="Auth.togglePassword()" id="btnTogglePassword" class="absolute right-3 text-gray-500 hover:text-emerald-800 focus:outline-none p-0 flex items-center justify-center h-6 w-6" title="Mostrar/Ocultar Senha"></button>
           </div>
         </div>
         <div class="flex items-center">
@@ -286,6 +287,9 @@
     </div>
 
   </main>
+  
+  <div id="notification-container" class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none"></div>
+
   <script src="app.js"></script>
 </body>
 </html>

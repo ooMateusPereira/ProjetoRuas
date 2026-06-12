@@ -2,9 +2,13 @@
 const PACIENTES_KEY = 'ruas_pacientes_db';
 const SCHEMA_KEY = 'form_schema_db';
 const FINANCEIRO_KEY = 'ruas_finance_db';
-const TAREFAS_KEY = 'ruas_tarefas_db'; // Novo Banco
+const TAREFAS_KEY = 'ruas_tarefas_db'; 
 const LOCK_KEY = 'ruas_lockout_db'; 
 const SESSION_PERSIST_KEY = 'ruas_saved_session'; 
+
+// SVGs Dinâmicos de Contorno
+const eyeOpenSVG = '<svg class="w-5 h-5 eye-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+const eyeClosedSVG = '<svg class="w-5 h-5 eye-icon" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
 
 const defaultSchemas = {
   'adulto': { title: 'Perfil Adulto', fields: [{ id: 'a_nome', label: 'Nome Social / Completo *', type: 'text' }, { id: 'a_idade', label: 'Idade', type: 'number' }, { id: 'a_tempo', label: 'Tempo de Situação de Rua', type: 'select', options: ['Menos de 6 meses', '6 meses a 1 ano', '1 a 5 anos', 'Mais de 5 anos'] }, { id: 'a_saude', label: 'Condições de Saúde / Uso de Substâncias', type: 'textarea' }, { id: 'a_demandas', label: 'Demandas do Atendimento Hoje', type: 'textarea' }] },
@@ -24,11 +28,20 @@ const Utils = {
     if(urgencia === 'ALTA') return 'text-red-700 bg-red-100 px-2 py-1 rounded font-bold';
     if(urgencia === 'MÉDIA') return 'text-yellow-700 bg-yellow-100 px-2 py-1 rounded font-bold';
     return 'text-green-700 bg-green-100 px-2 py-1 rounded font-bold';
+  },
+  notify: (mensagem, tipo = 'sucesso') => {
+    const container = document.getElementById('notification-container');
+    const n = document.createElement('div');
+    n.className = `p-4 rounded-lg shadow-xl text-white font-bold text-sm flex items-center gap-2 transform transition-all duration-300 translate-x-full pointer-events-auto ${tipo === 'sucesso' ? 'bg-emerald-600' : 'bg-red-600'}`;
+    n.innerHTML = `<span class="text-xl">${tipo === 'sucesso' ? '✅' : '❌'}</span> ${mensagem}`;
+    container.appendChild(n);
+    setTimeout(() => { n.classList.remove('translate-x-full'); }, 10);
+    setTimeout(() => { n.classList.add('translate-x-full'); setTimeout(() => n.remove(), 300); }, 5000);
   }
 };
 
 // ==========================================
-// MÓDULO BACKEND (Comunicação com o Python)
+// MÓDULO BACKEND
 // ==========================================
 const Backend = {
   cache: { [PACIENTES_KEY]: [], [SCHEMA_KEY]: null, [FINANCEIRO_KEY]: [], [TAREFAS_KEY]: [] },
@@ -36,7 +49,6 @@ const Backend = {
     try {
       const urls = [fetch(`/api/data/${PACIENTES_KEY}`), fetch(`/api/data/${SCHEMA_KEY}`), fetch(`/api/data/${FINANCEIRO_KEY}`), fetch(`/api/data/${TAREFAS_KEY}`)];
       const [rPac, rSch, rFin, rTar] = await Promise.all(urls);
-      
       const pac = await rPac.json(); if(pac) Backend.cache[PACIENTES_KEY] = pac;
       const sch = await rSch.json(); if(sch) Backend.cache[SCHEMA_KEY] = sch;
       const fin = await rFin.json(); if(fin) Backend.cache[FINANCEIRO_KEY] = fin;
@@ -74,7 +86,6 @@ const Tarefas = {
   },
   render: () => {
     const db = Tarefas.getDB(); let pendentes = ''; let concluidas = '';
-    // Mostra as mais recentes primeiro
     [...db].reverse().forEach(t => {
       if(!t.completed) {
         pendentes += `<li class="flex justify-between items-center bg-white p-3 border border-emerald-200 rounded-lg shadow-sm">
@@ -107,6 +118,7 @@ const Auth = {
   credential: { user: 'voluntario', pass: 'Projeto@Voluntario26' },
   init: () => {
     document.getElementById('formLogin').addEventListener('submit', Auth.handleLogin);
+    document.getElementById('btnTogglePassword').innerHTML = eyeOpenSVG;
     const session = sessionStorage.getItem('ruas_session') || localStorage.getItem(SESSION_PERSIST_KEY);
     if (session) { App.currentUser = JSON.parse(session); App.startSession(); Auth.resetInactivityTimeout(); } else { App.navigate('login'); }
     window.addEventListener('mousemove', Auth.resetInactivityTimeout);
@@ -114,7 +126,14 @@ const Auth = {
   },
   togglePassword: () => {
     const p = document.getElementById('loginPass');
-    p.type = p.type === 'password' ? 'text' : 'password';
+    const btn = document.getElementById('btnTogglePassword');
+    if(p.type === 'password') {
+      p.type = 'text';
+      btn.innerHTML = eyeClosedSVG; 
+    } else {
+      p.type = 'password';
+      btn.innerHTML = eyeOpenSVG; 
+    }
   },
   resetInactivityTimeout: () => {
     clearTimeout(Auth.timeoutTimer);
@@ -137,8 +156,15 @@ const Auth = {
       err.classList.add('hidden'); lock.attempts = 0; lockDb[u] = lock; localStorage.setItem(LOCK_KEY, JSON.stringify(lockDb));
       App.currentUser = { username: u };
       sessionStorage.setItem('ruas_session', JSON.stringify(App.currentUser));
-      if(document.getElementById('loginRemember').checked) localStorage.setItem(SESSION_PERSIST_KEY, JSON.stringify(App.currentUser));
-      document.getElementById('formLogin').reset(); App.startSession(); Auth.resetInactivityTimeout();
+      if(document.getElementById('loginRemember').checked) {
+        localStorage.setItem(SESSION_PERSIST_KEY, JSON.stringify(App.currentUser));
+      } else {
+        localStorage.removeItem(SESSION_PERSIST_KEY);
+      }
+      document.getElementById('formLogin').reset(); 
+      document.getElementById('loginPass').type = 'password';
+      document.getElementById('btnTogglePassword').innerHTML = eyeOpenSVG;
+      App.startSession(); Auth.resetInactivityTimeout();
     } else {
       lock.attempts += 1;
       if (lock.attempts >= Auth.maxAttempts) lock.lockedUntil = Date.now() + Auth.lockTimeMs;
@@ -178,11 +204,11 @@ const Prontuario = {
       if (editAtendId) {
         const atIndex = db[pacIndex].historico.findIndex(a => a.id === editAtendId);
         db[pacIndex].historico[atIndex] = { ...db[pacIndex].historico[atIndex], respostas, urgencia };
-        db[pacIndex].nome = nomePrincipal; alert('Registro atualizado com sucesso!');
-      } else { db[pacIndex].historico.push(novoAtend); alert('Evolução adicionada ao prontuário!'); }
+        db[pacIndex].nome = nomePrincipal; Utils.notify('Registro Atualizado');
+      } else { db[pacIndex].historico.push(novoAtend); Utils.notify('Evolução Adicionada'); }
     } else {
       db.push({ id: Utils.generateId(), nome: nomePrincipal, perfil: schemas[pChave].title, perfilChave: pChave, historico: [novoAtend] });
-      alert('Paciente cadastrado permanentemente!');
+      Utils.notify('Cadastro Realizado');
     }
     Prontuario.savePacientes(db); Prontuario.fecharEdicao();
     if(editPacId && !editAtendId) Prontuario.abrirProntuario(editPacId); else App.navigate('cadastrados');
@@ -296,10 +322,8 @@ const Dashboard = {
       filename = "base_pacientes_ruas.csv"; csv += "Nome do Assistido;Perfil;Data;Urgência;Evolução\n"; Prontuario.getPacientes().forEach(p => p.historico.forEach(h => { const res = Object.entries(h.respostas).map(([l, v]) => `${l}: ${v}`).join(' | '); csv += `${p.nome};${p.perfil};${h.dataStr};${h.urgencia};${res}\n`; }));
     }
     
-    // Faz o download da base gerada independente da ação
     Dashboard.dispararDownload(csv, filename);
 
-    // Se o usuário clicou em 'Email', abre o cliente de e-mail com a instrução para anexar
     if(acao === 'email') {
       const assunto = encodeURIComponent(`Relatório Oficial: ${filename}`);
       const corpo = encodeURIComponent(`Olá equipe,\n\nSegue em anexo o relatório exportado diretamente do sistema do Projeto Ruas.\n\n(Importante: Lembre-se de anexar o arquivo '${filename}' que acabou de ser baixado no seu dispositivo antes de enviar este e-mail).\n\nAtenciosamente,\nSistema de Gestão - Projeto Ruas`);
@@ -309,12 +333,16 @@ const Dashboard = {
   dispararDownload: (content, filename) => { const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.setAttribute("download", filename); document.body.appendChild(link); link.click(); document.body.removeChild(link); }
 };
 
+// ==========================================
+// FINANCEIRO
+// ==========================================
 const Financeiro = {
   getDB: () => Backend.get(FINANCEIRO_KEY), saveDB: (db) => Backend.save(FINANCEIRO_KEY, db),
   init: () => document.getElementById('formFinanceiro').addEventListener('submit', Financeiro.salvarRegistro),
   salvarRegistro: (e) => {
     e.preventDefault(); const r = { id: Utils.generateId(), data: new Date().toLocaleString('pt-BR'), tipo: document.getElementById('finTipo').value, desc: Utils.escapeHTML(document.getElementById('finDesc').value), valor: parseFloat(document.getElementById('finValor').value), user: App.currentUser.username };
     const db = Financeiro.getDB(); db.push(r); Financeiro.saveDB(db); document.getElementById('formFinanceiro').reset(); Financeiro.render();
+    Utils.notify('Registro Financeiro Salvo');
   },
   render: () => {
     const db = Financeiro.getDB().slice().reverse(); let cx = 0; let pv = 0; let html = '';
@@ -327,6 +355,9 @@ const Financeiro = {
   }
 };
 
+// ==========================================
+// MOTOR DE FORMULÁRIOS DINÂMICOS
+// ==========================================
 const FormEngine = {
   getSchemas: () => Backend.get(SCHEMA_KEY) || defaultSchemas, saveSchemas: (s) => Backend.save(SCHEMA_KEY, s),
   initAdmin: () => {
@@ -351,6 +382,9 @@ const FormEngine = {
   }
 };
 
+// ==========================================
+// CONTROLADOR SPA
+// ==========================================
 const App = {
   currentUser: null,
   init: async () => {
@@ -372,7 +406,6 @@ const App = {
     const nav = document.getElementById('mainNav');
     const menuBtn = document.getElementById('mobileMenuBtn');
     
-    // Oculta completamente o menu se estiver na tela de login
     if (viewId === 'login') {
       nav.classList.add('hidden');
       menuBtn.classList.add('hidden');
