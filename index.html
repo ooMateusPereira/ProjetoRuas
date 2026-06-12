@@ -38,7 +38,7 @@
         <button onclick="App.navigate('cadastrados')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Pessoas Cadastradas</button>
         <button onclick="App.navigate('dashboard')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Dashboard Analítico</button>
         <button onclick="App.navigate('financeiro')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Gestão Financeira/Materiais</button>
-        <button onclick="App.navigate('formAdmin')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Formulários</button>
+        <button onclick="App.navigate('formAdmin')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Editar Formulários</button>
         <button onclick="Auth.logout()" class="px-3 py-2 bg-red-500/80 hover:bg-red-600 rounded text-left md:text-center">Sair</button>
       </nav>
     </div>
@@ -126,32 +126,66 @@
     </div>
 
     <div id="view-dashboard" class="view">
-      <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Dashboard Analítico</h2>
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+        <h2 class="text-xl font-bold text-emerald-900 font-display">Dashboard Analítico</h2>
+        
+        <div class="w-full md:w-72 bg-white p-2 rounded-lg border border-emerald-200 shadow-sm">
+          <label class="block text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">Contexto de Análise</label>
+          <select id="selectContextoDashboard" onchange="Dashboard.alterarContexto(this.value)" class="w-full p-2 text-sm font-bold text-emerald-900 outline-none bg-emerald-50 rounded cursor-pointer">
+            <option value="triagens">📋 Assistidos & Triagens da ONG</option>
+            <option value="economias">💰 Balanço Econômico & Materiais</option>
+          </select>
+        </div>
+      </div>
       
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div class="bg-white p-4 rounded-xl border-l-4 border-emerald-500 shadow-sm">
-          <h3 class="text-xs font-bold text-gray-500 uppercase">Total Pacientes</h3>
-          <p id="dashKpiTotal" class="text-2xl font-bold">0</p>
-        </div>
-        <div class="bg-white p-4 rounded-xl border-l-4 border-blue-500 shadow-sm">
-          <h3 class="text-xs font-bold text-gray-500 uppercase">Total Atendimentos</h3>
-          <p id="dashKpiAtend" class="text-2xl font-bold">0</p>
-        </div>
-        <div class="bg-white p-4 rounded-xl border-l-4 border-red-500 shadow-sm">
-          <h3 class="text-xs font-bold text-gray-500 uppercase">Alta Urgência Atual</h3>
-          <p id="dashKpiUrgencia" class="text-2xl font-bold text-red-600">0</p>
+      <div id="containerFiltrosCruzados" class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 mb-6 space-y-3">
+        <h3 class="text-xs font-bold text-emerald-900 uppercase tracking-wider border-b pb-1">Cruzamento de Dados & Filtros Combinados</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <span class="block text-xs font-bold text-gray-500 mb-1">Filtrar por Perfil:</span>
+            <div class="flex flex-wrap gap-4 text-sm">
+              <label class="flex items-center cursor-pointer font-bold text-gray-700"><input type="checkbox" value="adulto" class="chk-filtro-perfil mr-1 rounded" onchange="Dashboard.render()"> Adultos</label>
+              <label class="flex items-center cursor-pointer font-bold text-gray-700"><input type="checkbox" value="crianca" class="chk-filtro-perfil mr-1 rounded" onchange="Dashboard.render()"> Crianças/Adolescentes</label>
+            </div>
+          </div>
+          <div>
+            <span class="block text-xs font-bold text-gray-500 mb-1">Filtrar por Urgência Técnica:</span>
+            <div class="flex flex-wrap gap-4 text-sm">
+              <label class="flex items-center cursor-pointer font-bold text-red-700"><input type="checkbox" value="ALTA" class="chk-filtro-urgencia mr-1 rounded" onchange="Dashboard.render()"> 🚨 Alta</label>
+              <label class="flex items-center cursor-pointer font-bold text-yellow-700"><input type="checkbox" value="MÉDIA" class="chk-filtro-urgencia mr-1 rounded" onchange="Dashboard.render()"> ⚠️ Média</label>
+              <label class="flex items-center cursor-pointer font-bold text-green-700"><input type="checkbox" value="BAIXA" class="chk-filtro-urgencia mr-1 rounded" onchange="Dashboard.render()"> ✅ Baixa</label>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div id="containerKpisTriagem" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white p-4 rounded-xl border-l-4 border-emerald-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Total Pacientes</h3><p id="dashKpiTotal" class="text-2xl font-bold">0</p></div>
+        <div class="bg-white p-4 rounded-xl border-l-4 border-blue-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Total Atendimentos</h3><p id="dashKpiAtend" class="text-2xl font-bold">0</p></div>
+        <div class="bg-white p-4 rounded-xl border-l-4 border-red-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Alta Urgência Atual</h3><p id="dashKpiUrgencia" class="text-2xl font-bold text-red-600">0</p></div>
+      </div>
+
+      <div id="containerKpisEconomia" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 hidden">
+        <div class="bg-white p-4 rounded-xl border-l-4 border-green-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Saldo em Caixa</h3><p id="dashKpiCaixa" class="text-2xl font-bold text-green-700">R$ 0,00</p></div>
+        <div class="bg-white p-4 rounded-xl border-l-4 border-yellow-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Despesas Previstas</h3><p id="dashKpiPrevisto" class="text-2xl font-bold text-yellow-600">R$ 0,00</p></div>
+        <div class="bg-white p-4 rounded-xl border-l-4 border-blue-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Insumos Distribuídos</h3><p id="dashKpiMateriais" class="text-2xl font-bold text-blue-600">0 un.</p></div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100">
-          <h3 class="font-bold text-emerald-900 mb-2 text-sm text-center">Distribuição por Perfil</h3>
+          <h3 id="tituloGrafico1" class="font-bold text-emerald-900 mb-2 text-sm text-center">Distribuição por Perfil</h3>
           <div class="relative h-48 w-full"><canvas id="chartPerfil"></canvas></div>
         </div>
         <div class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100">
-          <h3 class="font-bold text-emerald-900 mb-2 text-sm text-center">Métricas de Urgência</h3>
+          <h3 id="tituloGrafico2" class="font-bold text-emerald-900 mb-2 text-sm text-center">Métricas de Urgência</h3>
           <div class="relative h-48 w-full"><canvas id="chartUrgencia"></canvas></div>
         </div>
+      </div>
+
+      <div class="flex justify-end mb-4">
+        <button onclick="Dashboard.exportarParaExcel()" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-4 rounded-lg shadow text-sm flex items-center gap-1">
+          📊 Exportar Base Atual para o Excel
+        </button>
       </div>
     </div>
 
