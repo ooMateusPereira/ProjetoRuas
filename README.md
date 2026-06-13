@@ -35,8 +35,14 @@ sudo docker compose up -d --build
 
 - API + frontend disponíveis em `http://127.0.0.1:5000`
 - `database.db` fica persistido em **`/home/mateus/projetoruas-data/`**
-  (fora de `/var/www`, que é **read-only** neste servidor) — faça
-  backup copiando esse arquivo.
+  (fora de `/var/www`, que é **read-only** neste servidor para criação
+  de novos arquivos/pastas) — faça backup copiando esse arquivo.
+
+> ⚠️ `index.html` e `app.js` **não** são montados via bind mount (pelo
+> mesmo motivo do `/var/www` read-only) — eles vão para dentro da
+> imagem no build (`COPY index.html app.js ./static/` no Dockerfile).
+> Qualquer alteração no frontend exige rebuild, que o
+> `start_ruas.sh` já faz automaticamente (`docker compose up -d --build`).
 
 ## Integração com seu setup atual (Nginx + Cloudflare Tunnel)
 
