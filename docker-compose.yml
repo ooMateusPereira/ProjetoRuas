@@ -1,0 +1,20 @@
+services:
+  ruas-backend:
+    build: .
+    container_name: ruas-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persistência do SQLite na pasta local ./data (fora do container)
+      - ./data:/app/data
+      # Permite atualizar o frontend sem rebuild da imagem (opcional)
+      - ./static:/app/static
+    environment:
+      - DATABASE_PATH=/app/data/database.db
+    networks:
+      - ruas-net
+
+networks:
+  ruas-net:
+    driver: bridge
