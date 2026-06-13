@@ -11,7 +11,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py schema.sql ./
-COPY static ./static
+# Frontend estático na raiz do repositório (index.html, app.js)
+COPY index.html app.js ./static/
 
 # Diretório de dados (será montado como volume)
 RUN mkdir -p /app/data

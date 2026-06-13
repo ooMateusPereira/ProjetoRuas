@@ -9,7 +9,8 @@ services:
       # Persistência do SQLite na pasta local ./data (fora do container)
       - ./data:/app/data
       # Permite atualizar o frontend sem rebuild da imagem (opcional)
-      - ./static:/app/static
+      - ./index.html:/app/static/index.html
+      - ./app.js:/app/static/app.js
     environment:
       - DATABASE_PATH=/app/data/database.db
     networks:
