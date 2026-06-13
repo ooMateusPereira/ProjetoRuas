@@ -28,13 +28,15 @@ projetoruas/
 
 ```bash
 cd /var/www/projetoruas
+sudo mkdir -p /home/mateus/projetoruas-data
+sudo chown -R mateus:mateus /home/mateus/projetoruas-data
 sudo docker compose up -d --build
 ```
 
 - API + frontend disponíveis em `http://127.0.0.1:5000`
-- `data/database.db` fica persistido **fora** do container, na pasta
-  `/var/www/projetoruas/data/` do servidor — faça backup copiando esse
-  arquivo.
+- `database.db` fica persistido em **`/home/mateus/projetoruas-data/`**
+  (fora de `/var/www`, que é **read-only** neste servidor) — faça
+  backup copiando esse arquivo.
 
 ## Integração com seu setup atual (Nginx + Cloudflare Tunnel)
 
@@ -82,11 +84,12 @@ foram ajustados para chamar `docker compose up -d --build` /
 ## Backup do banco
 
 ```bash
-cp /var/www/projetoruas/data/database.db \
-   /var/www/projetoruas/data/database_$(date +%Y%m%d).db.bak
+cp /home/mateus/projetoruas-data/database.db \
+   /home/mateus/projetoruas-data/database_$(date +%Y%m%d).db.bak
 ```
 
-`data/` já está no `.gitignore` — não será versionado pelo `git pull`.
+`/home/mateus/projetoruas-data/` está fora do repositório Git, então
+não há risco de ser sobrescrito pelo `git pull`.
 
 ## Rotas principais da API
 

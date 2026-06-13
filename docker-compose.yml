@@ -6,8 +6,8 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      # Persistência do SQLite na pasta local ./data (fora do container)
-      - ./data:/app/data
+      # Persistência do SQLite fora de /var/www (que é read-only neste servidor)
+      - /home/mateus/projetoruas-data:/app/data
       # Permite atualizar o frontend sem rebuild da imagem (opcional)
       - ./index.html:/app/static/index.html
       - ./app.js:/app/static/app.js
