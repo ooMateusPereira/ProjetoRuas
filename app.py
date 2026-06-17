@@ -8,23 +8,33 @@ schemas de formulários dinâmicos.
 
 Estrutura de rotas:
   GET/POST  /api/schemas
-  GET       /api/pacientes
+  DELETE    /api/schemas/<perfil_chave>
+  GET       /api/pacientes  (filtros: bairro, perfil_chave, ano, data_inicio, data_fim)
   POST      /api/pacientes
   GET       /api/pacientes/<id>
   PUT       /api/pacientes/<id>
   DELETE    /api/pacientes/<id>
   POST      /api/pacientes/<id>/atendimentos
   PUT       /api/pacientes/<id>/atendimentos/<atend_id>
+  PATCH     /api/pacientes/<id>/atendimentos/<atend_id>/urgencia
   POST      /api/pacientes/<id>/timeline
-  GET       /api/tarefas
+  GET       /api/tarefas  (filtro: bairro)
   POST      /api/tarefas
   PUT       /api/tarefas/<id>
   DELETE    /api/tarefas/<id>
   POST      /api/tarefas/<id>/comentarios
-  GET       /api/financeiro
+  GET       /api/financeiro  (filtros: ano, data_inicio, data_fim)
   POST      /api/financeiro
+  GET       /api/materiais  (filtros: ano, data_inicio, data_fim, bairro, tipo, vencidos)
+  POST      /api/materiais
+  DELETE    /api/materiais/<id>
+  GET       /api/materiais/analise
   GET       /api/logs
   POST      /api/logs
+  POST      /api/auth/login
+  POST      /api/auth/trocar-senha
+  GET       /api/usuarios  (requer ?requester=<username> da diretoria)
+  POST      /api/usuarios/<username>/redefinir-senha  (diretoria)
 """
 
 import os
@@ -34,6 +44,7 @@ import uuid
 from datetime import datetime
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "data", "database.db"))
@@ -83,12 +94,22 @@ def init_db():
                 ],
             },
             "crianca": {
-                "title": "Perfil Criança / Adolescente",
+                "title": "Perfil Criança",
                 "fields": [
-                    {"id": "c_nome", "label": "Nome da Criança/Adolescente *", "type": "text"},
+                    {"id": "c_nome", "label": "Nome da Criança *", "type": "text"},
                     {"id": "c_idade", "label": "Idade", "type": "number"},
                     {"id": "c_resp", "label": "Nome do Responsável Presente", "type": "text"},
                     {"id": "c_saude", "label": "Condição de Saúde, Sinais Físicos", "type": "textarea"},
+                ],
+            },
+            "adolescente": {
+                "title": "Perfil Adolescente",
+                "fields": [
+                    {"id": "ad_nome", "label": "Nome do Adolescente *", "type": "text"},
+                    {"id": "ad_idade", "label": "Idade", "type": "number"},
+                    {"id": "ad_resp", "label": "Nome do Responsável Presente", "type": "text"},
+                    {"id": "ad_saude", "label": "Condição de Saúde, Sinais Físicos", "type": "textarea"},
+                    {"id": "ad_demandas", "label": "Demandas do Atendimento Hoje", "type": "textarea"},
                 ],
             },
         }
@@ -98,7 +119,32 @@ def init_db():
                 (chave, schema["title"], json.dumps(schema["fields"], ensure_ascii=False)),
             )
         conn.commit()
+
+    # Popular usuários padrão se ainda não existirem (senha inicial: Demo2026,
+    # com troca obrigatória no primeiro login - requisito de segurança)
+    cur = conn.execute("SELECT COUNT(*) FROM usuarios")
+    if cur.fetchone()[0] == 0:
+        senha_inicial_hash = generate_password_hash("Demo2026")
+        usuarios_padrao = [
+            ("diretoria", "diretoria", None, "Diretoria (Acesso Total)"),
+            ("largodomacho", "operacional", "largodomacho", "Largo do Machio"),
+            ("copacabana", "operacional", "copacabana", "Copacabana"),
+            ("tijuca", "operacional", "tijuca", "Tijuca"),
+            ("gloria", "operacional", "gloria", "Glória"),
+            ("botafogo", "operacional", "botafogo", "Botafogo"),
+        ]
+        for username, tipo, bairro, label in usuarios_padrao:
+            conn.execute(
+                """INSERT INTO usuarios (username, senha_hash, tipo, bairro, label, deve_trocar_senha)
+                   VALUES (?, ?, ?, ?, ?, 1)""",
+                (username, senha_inicial_hash, tipo, bairro, label),
+            )
+        conn.commit()
     conn.close()
+
+
+# Tipos de campo suportados pelo motor de formulários (requisito 1: +2 tipos novos)
+FIELD_TYPES = ["text", "number", "textarea", "select", "checkbox", "date"]
 
 
 # ----------------------------------------------------------------
@@ -138,15 +184,26 @@ def save_schemas():
     data = request.get_json(force=True)
     db = get_db()
     for chave, schema in data.items():
-        # Validação: campos do tipo select precisam de >= 2 opções
         for f in schema.get("fields", []):
-            if f.get("type") == "select" and len(f.get("options", [])) < 2:
-                return jsonify({"error": f"Campo '{f.get('label')}' (select) precisa de no mínimo 2 opções."}), 400
+            tipo = f.get("type")
+            if tipo not in FIELD_TYPES:
+                return jsonify({"error": f"Tipo de campo inválido: '{tipo}'."}), 400
+            # Validação: campos de múltipla escolha (select/checkbox) precisam de >= 2 opções
+            if tipo in ("select", "checkbox") and len(f.get("options", [])) < 2:
+                return jsonify({"error": f"Campo '{f.get('label')}' ({tipo}) precisa de no mínimo 2 opções."}), 400
         db.execute(
             """INSERT INTO form_schemas (perfil_chave, title, fields_json) VALUES (?, ?, ?)
                ON CONFLICT(perfil_chave) DO UPDATE SET title=excluded.title, fields_json=excluded.fields_json""",
             (chave, schema["title"], json.dumps(schema["fields"], ensure_ascii=False)),
         )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/schemas/<perfil_chave>", methods=["DELETE"])
+def deletar_schema(perfil_chave):
+    db = get_db()
+    db.execute("DELETE FROM form_schemas WHERE perfil_chave = ?", (perfil_chave,))
     db.commit()
     return jsonify({"ok": True})
 
@@ -168,6 +225,7 @@ def _carregar_paciente_completo(db, pac_id):
         a = dict(a)
         a["respostas"] = json.loads(a.pop("respostas_json"))
         a["dataStr"] = a.pop("data_str")
+        a["dataAtendimento"] = a.pop("data_atendimento")
         a["user"] = a.pop("usuario")
         pac["historico"].append(a)
 
@@ -181,18 +239,36 @@ def _carregar_paciente_completo(db, pac_id):
         e["user"] = e.pop("usuario")
         pac["eventosTimeline"].append(e)
 
+    urgencias = db.execute(
+        "SELECT * FROM historico_urgencia WHERE paciente_id = ? ORDER BY criado_em ASC", (pac_id,)
+    ).fetchall()
+    pac["historicoUrgencia"] = []
+    for u in urgencias:
+        u = dict(u)
+        u["atendimentoId"] = u.pop("atendimento_id")
+        u["urgenciaAnterior"] = u.pop("urgencia_anterior")
+        u["urgenciaNova"] = u.pop("urgencia_nova")
+        u["data"] = u.pop("data_str")
+        u["user"] = u.pop("usuario")
+        pac["historicoUrgencia"].append(u)
+
     # Normalizar nomes de campos para o formato esperado pelo frontend
     pac["perfilChave"] = pac.pop("perfil_chave")
     pac["notasGerais"] = pac.pop("notas_gerais")
     pac["historicoVida"] = pac.pop("historico_vida")
     pac["criadoPor"] = pac.pop("criado_por")
+    pac["bairroRegistro"] = pac.pop("bairro_registro")
     return pac
 
 
 @app.route("/api/pacientes", methods=["GET"])
 def listar_pacientes():
     """Lista todos os pacientes com histórico e timeline completos.
-    Suporta filtro opcional por bairro: /api/pacientes?bairro=copacabana
+    Filtros opcionais:
+      ?bairro=copacabana
+      ?perfil_chave=adulto|crianca|adolescente
+      ?ano=2026 (filtra pelo ano do primeiro atendimento)
+      ?data_inicio=2026-01-01&data_fim=2026-12-31
     """
     db = get_db()
     bairro = request.args.get("bairro")
@@ -200,7 +276,32 @@ def listar_pacientes():
         rows = db.execute("SELECT id FROM pacientes WHERE bairro = ? ORDER BY criado_em ASC", (bairro,)).fetchall()
     else:
         rows = db.execute("SELECT id FROM pacientes ORDER BY criado_em ASC").fetchall()
-    return jsonify([_carregar_paciente_completo(db, r["id"]) for r in rows])
+
+    pacientes = [_carregar_paciente_completo(db, r["id"]) for r in rows]
+
+    perfil_chave = request.args.get("perfil_chave")
+    ano = request.args.get("ano")
+    data_inicio = request.args.get("data_inicio")
+    data_fim = request.args.get("data_fim")
+
+    if perfil_chave:
+        pacientes = [p for p in pacientes if p["perfilChave"] == perfil_chave]
+
+    if ano or data_inicio or data_fim:
+        def primeiro_atend_data(p):
+            if not p["historico"]:
+                return None
+            a = p["historico"][0]
+            return a.get("dataAtendimento") or _data_iso_de_data_str(a["dataStr"])
+
+        if ano:
+            pacientes = [p for p in pacientes if (primeiro_atend_data(p) or "")[:4] == str(ano)]
+        if data_inicio:
+            pacientes = [p for p in pacientes if primeiro_atend_data(p) and primeiro_atend_data(p) >= data_inicio]
+        if data_fim:
+            pacientes = [p for p in pacientes if primeiro_atend_data(p) and primeiro_atend_data(p) <= data_fim]
+
+    return jsonify(pacientes)
 
 
 @app.route("/api/pacientes", methods=["POST"])
@@ -211,14 +312,16 @@ def criar_paciente():
     pac_id = data.get("id") or new_id()
 
     db.execute(
-        """INSERT INTO pacientes (id, nome, perfil, perfil_chave, bairro, criado_por, notas_gerais, historico_vida)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO pacientes (id, nome, perfil, perfil_chave, bairro, bairro_registro, criado_por, notas_gerais, historico_vida)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (pac_id, data["nome"], data["perfil"], data["perfilChave"], data.get("bairro"),
-         data.get("criadoPor"), data.get("notasGerais", ""), data.get("historicoVida", "")),
+         data.get("bairroRegistro"), data.get("criadoPor"), data.get("notasGerais", ""), data.get("historicoVida", "")),
     )
 
     for atend in data.get("historico", []):
-        _inserir_atendimento(db, pac_id, atend)
+        atend_id = _inserir_atendimento(db, pac_id, atend)
+        # Registro inicial de urgência no histórico
+        _inserir_historico_urgencia(db, pac_id, atend_id, None, atend.get("urgencia", "BAIXA"), atend.get("user"), atend.get("dataStr", now_str()))
 
     for ev in data.get("eventosTimeline", []):
         _inserir_evento(db, pac_id, ev)
@@ -238,19 +341,39 @@ def obter_paciente(pac_id):
 
 @app.route("/api/pacientes/<pac_id>", methods=["PUT"])
 def atualizar_paciente(pac_id):
-    """Atualiza nome, notas gerais e histórico de vida do paciente."""
+    """Atualiza nome, notas gerais, histórico de vida e bairro de registro do paciente."""
     data = request.get_json(force=True)
     db = get_db()
     pac = db.execute("SELECT * FROM pacientes WHERE id = ?", (pac_id,)).fetchone()
     if not pac:
         return jsonify({"error": "Paciente não encontrado"}), 404
 
+    novo_bairro_registro = data.get("bairroRegistro", pac["bairro_registro"])
+
     db.execute(
-        """UPDATE pacientes SET nome = ?, notas_gerais = ?, historico_vida = ?, atualizado_em = datetime('now')
+        """UPDATE pacientes SET nome = ?, notas_gerais = ?, historico_vida = ?, bairro_registro = ?, atualizado_em = datetime('now')
            WHERE id = ?""",
         (data.get("nome", pac["nome"]), data.get("notasGerais", pac["notas_gerais"]),
-         data.get("historicoVida", pac["historico_vida"]), pac_id),
+         data.get("historicoVida", pac["historico_vida"]), novo_bairro_registro, pac_id),
     )
+
+    # Auditoria: alteração de bairro de registro (requisito 9 e 10)
+    if novo_bairro_registro != pac["bairro_registro"]:
+        log_id = new_id()
+        db.execute(
+            """INSERT INTO logs_auditoria (id, data_iso, data_str, usuario, bairro, modulo, acao, alvo, campo, valor_anterior, valor_novo)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (log_id, datetime.now().isoformat(), now_str(), data.get("user"), data.get("bairroOperador"),
+             "Prontuario", "editar-bairro-registro", pac["nome"], "Bairro de Registro",
+             pac["bairro_registro"], novo_bairro_registro),
+        )
+        _inserir_evento(db, pac_id, {
+            "tipo": "alteracao",
+            "descricao": f"Bairro de registro alterado: {pac['bairro_registro'] or '(não definido)'} → {novo_bairro_registro}",
+            "data": now_str(),
+            "user": data.get("user"),
+        })
+
     db.commit()
     return jsonify(_carregar_paciente_completo(db, pac_id))
 
@@ -266,13 +389,23 @@ def deletar_paciente(pac_id):
 def _inserir_atendimento(db, pac_id, atend):
     atend_id = atend.get("id") or new_id()
     db.execute(
-        """INSERT INTO atendimentos (id, paciente_id, data_str, respostas_json, urgencia, usuario)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (atend_id, pac_id, atend.get("dataStr", now_str()),
+        """INSERT INTO atendimentos (id, paciente_id, data_str, data_atendimento, respostas_json, urgencia, usuario)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (atend_id, pac_id, atend.get("dataStr", now_str()), atend.get("dataAtendimento"),
          json.dumps(atend.get("respostas", {}), ensure_ascii=False),
          atend.get("urgencia", "BAIXA"), atend.get("user")),
     )
     return atend_id
+
+
+def _inserir_historico_urgencia(db, pac_id, atend_id, urgencia_anterior, urgencia_nova, usuario, data_str=None):
+    h_id = new_id()
+    db.execute(
+        """INSERT INTO historico_urgencia (id, paciente_id, atendimento_id, urgencia_anterior, urgencia_nova, usuario, data_str)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (h_id, pac_id, atend_id, urgencia_anterior, urgencia_nova, usuario, data_str or now_str()),
+    )
+    return h_id
 
 
 def _inserir_evento(db, pac_id, ev):
@@ -296,6 +429,7 @@ def adicionar_atendimento(pac_id):
         return jsonify({"error": "Paciente não encontrado"}), 404
 
     atend_id = _inserir_atendimento(db, pac_id, data)
+    _inserir_historico_urgencia(db, pac_id, atend_id, None, data.get("urgencia", "BAIXA"), data.get("user"), data.get("dataStr", now_str()))
 
     # Atualiza nome principal se enviado
     if data.get("nome"):
@@ -316,20 +450,62 @@ def adicionar_atendimento(pac_id):
 
 @app.route("/api/pacientes/<pac_id>/atendimentos/<atend_id>", methods=["PUT"])
 def editar_atendimento(pac_id, atend_id):
-    """Edita um atendimento existente (correção de ficha)."""
+    """Edita um atendimento existente (correção de ficha). Se a urgência mudar,
+    registra no histórico de urgência (requisito 4)."""
     data = request.get_json(force=True)
     db = get_db()
     atend = db.execute("SELECT * FROM atendimentos WHERE id = ? AND paciente_id = ?", (atend_id, pac_id)).fetchone()
     if not atend:
         return jsonify({"error": "Atendimento não encontrado"}), 404
 
+    nova_urgencia = data.get("urgencia", atend["urgencia"])
+    nova_data_atend = data.get("dataAtendimento", atend["data_atendimento"])
+
     db.execute(
-        "UPDATE atendimentos SET respostas_json = ?, urgencia = ? WHERE id = ?",
-        (json.dumps(data.get("respostas", {}), ensure_ascii=False), data.get("urgencia", atend["urgencia"]), atend_id),
+        "UPDATE atendimentos SET respostas_json = ?, urgencia = ?, data_atendimento = ? WHERE id = ?",
+        (json.dumps(data.get("respostas", {}), ensure_ascii=False), nova_urgencia, nova_data_atend, atend_id),
     )
+
+    if nova_urgencia != atend["urgencia"]:
+        _inserir_historico_urgencia(db, pac_id, atend_id, atend["urgencia"], nova_urgencia, data.get("user"))
+        _inserir_evento(db, pac_id, {
+            "tipo": "alteracao",
+            "descricao": f"Urgência alterada: {atend['urgencia']} → {nova_urgencia}",
+            "data": now_str(),
+            "user": data.get("user"),
+        })
+
     if data.get("nome"):
         db.execute("UPDATE pacientes SET nome = ?, atualizado_em = datetime('now') WHERE id = ?",
                     (data["nome"], pac_id))
+    db.commit()
+    return jsonify(_carregar_paciente_completo(db, pac_id))
+
+
+@app.route("/api/pacientes/<pac_id>/atendimentos/<atend_id>/urgencia", methods=["PATCH"])
+def alterar_urgencia(pac_id, atend_id):
+    """Atualiza apenas a urgência de um atendimento (edição manual pós-salvamento)."""
+    data = request.get_json(force=True)
+    db = get_db()
+    atend = db.execute("SELECT * FROM atendimentos WHERE id = ? AND paciente_id = ?", (atend_id, pac_id)).fetchone()
+    if not atend:
+        return jsonify({"error": "Atendimento não encontrado"}), 404
+
+    nova_urgencia = data["urgencia"]
+    if nova_urgencia not in ("ALTA", "MÉDIA", "BAIXA"):
+        return jsonify({"error": "Urgência inválida. Use ALTA, MÉDIA ou BAIXA."}), 400
+
+    db.execute("UPDATE atendimentos SET urgencia = ? WHERE id = ?", (nova_urgencia, atend_id))
+
+    if nova_urgencia != atend["urgencia"]:
+        _inserir_historico_urgencia(db, pac_id, atend_id, atend["urgencia"], nova_urgencia, data.get("user"))
+        _inserir_evento(db, pac_id, {
+            "tipo": "alteracao",
+            "descricao": f"Urgência alterada manualmente: {atend['urgencia']} → {nova_urgencia}",
+            "data": now_str(),
+            "user": data.get("user"),
+        })
+
     db.commit()
     return jsonify(_carregar_paciente_completo(db, pac_id))
 
@@ -373,6 +549,8 @@ def _carregar_tarefa_completa(db, tarefa_id):
     t["user"] = t.pop("usuario")
     t["pacienteId"] = t.pop("paciente_id")
     t["origemFinanceiro"] = t.pop("origem_financeiro_id")
+    t["bairroOrigem"] = t.pop("bairro_origem")
+    t["mencoes"] = json.loads(t.pop("mencoes_json") or "[]")
     t["completed"] = (t["status"] == "Concluído")
     t["anexos"] = []  # reservado para uploads futuros
     return t
@@ -380,14 +558,18 @@ def _carregar_tarefa_completa(db, tarefa_id):
 
 @app.route("/api/tarefas", methods=["GET"])
 def listar_tarefas():
-    """Lista tarefas, opcionalmente filtradas por bairro.
+    """Lista tarefas. Por padrão retorna tarefas do bairro (ou sem bairro) +
+    tarefas onde o bairro foi mencionado via @ (requisito 8 - tarefas entre equipes).
     /api/tarefas?bairro=copacabana
     """
     db = get_db()
     bairro = request.args.get("bairro")
     if bairro:
         rows = db.execute(
-            "SELECT id FROM tarefas WHERE bairro = ? OR bairro IS NULL ORDER BY criado_em ASC", (bairro,)
+            """SELECT id FROM tarefas
+               WHERE bairro = ? OR bairro IS NULL OR mencoes_json LIKE ?
+               ORDER BY criado_em ASC""",
+            (bairro, f'%"{bairro}"%'),
         ).fetchall()
     else:
         rows = db.execute("SELECT id FROM tarefas ORDER BY criado_em ASC").fetchall()
@@ -399,12 +581,14 @@ def criar_tarefa():
     data = request.get_json(force=True)
     db = get_db()
     tarefa_id = data.get("id") or new_id()
+    mencoes = data.get("mencoes", [])
     db.execute(
-        """INSERT INTO tarefas (id, texto, status, prioridade, prazo, data_str, usuario, bairro, paciente_id, origem_financeiro_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO tarefas (id, texto, status, prioridade, prazo, data_str, usuario, bairro, bairro_origem, paciente_id, mencoes_json, origem_financeiro_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (tarefa_id, data["text"], data.get("status", "Pendente"), data.get("prioridade", "Média"),
          data.get("prazo"), data.get("date", now_str()), data.get("user"), data.get("bairro"),
-         data.get("pacienteId"), data.get("origemFinanceiro")),
+         data.get("bairroOrigem"), data.get("pacienteId"), json.dumps(mencoes, ensure_ascii=False),
+         data.get("origemFinanceiro")),
     )
     db.commit()
     return jsonify(_carregar_tarefa_completa(db, tarefa_id)), 201
@@ -464,17 +648,45 @@ def adicionar_comentario(tarefa_id):
 # ==================================================================
 @app.route("/api/financeiro", methods=["GET"])
 def listar_financeiro():
+    """Lista registros financeiros. Filtros opcionais:
+    ?ano=2026 - filtra pelo ano de data_registro (ou data_str se ausente)
+    ?data_inicio=2026-01-01&data_fim=2026-12-31 - intervalo de datas (data_registro)
+    """
     db = get_db()
     rows = db.execute("SELECT * FROM financeiro ORDER BY criado_em ASC").fetchall()
     result = []
     for r in rows:
         r = dict(r)
         r["data"] = r.pop("data_str")
+        r["dataRegistro"] = r.pop("data_registro")
         r["desc"] = r.pop("descricao")
         r["user"] = r.pop("usuario")
         r["dataPrevista"] = r.pop("data_prevista")
         result.append(r)
+
+    ano = request.args.get("ano")
+    data_inicio = request.args.get("data_inicio")
+    data_fim = request.args.get("data_fim")
+
+    def data_efetiva(r):
+        return r.get("dataRegistro") or _data_iso_de_data_str(r["data"])
+
+    if ano:
+        result = [r for r in result if (data_efetiva(r) or "")[:4] == str(ano)]
+    if data_inicio:
+        result = [r for r in result if data_efetiva(r) and data_efetiva(r) >= data_inicio]
+    if data_fim:
+        result = [r for r in result if data_efetiva(r) and data_efetiva(r) <= data_fim]
+
     return jsonify(result)
+
+
+def _data_iso_de_data_str(data_str):
+    """Converte 'dd/mm/yyyy HH:MM:SS' -> 'yyyy-mm-dd' para comparação de filtros."""
+    try:
+        return datetime.strptime(data_str.split(" ")[0], "%d/%m/%Y").strftime("%Y-%m-%d")
+    except (ValueError, AttributeError):
+        return None
 
 
 @app.route("/api/financeiro", methods=["POST"])
@@ -485,9 +697,9 @@ def criar_registro_financeiro():
     db = get_db()
     reg_id = data.get("id") or new_id()
     db.execute(
-        """INSERT INTO financeiro (id, data_str, tipo, descricao, valor, usuario, bairro, data_prevista)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (reg_id, data.get("data", now_str()), data["tipo"], data["desc"], data["valor"],
+        """INSERT INTO financeiro (id, data_str, data_registro, tipo, descricao, valor, usuario, bairro, data_prevista)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (reg_id, data.get("data", now_str()), data.get("dataRegistro"), data["tipo"], data["desc"], data["valor"],
          data.get("user"), data.get("bairro"), data.get("dataPrevista")),
     )
 
@@ -508,8 +720,113 @@ def criar_registro_financeiro():
 
 
 # ==================================================================
-# LOGS / AUDITORIA
+# MATERIAIS (estoque, validade, movimentação)
 # ==================================================================
+@app.route("/api/materiais", methods=["GET"])
+def listar_materiais():
+    """Lista materiais. Filtros opcionais:
+    ?ano=2026, ?data_inicio=, ?data_fim=, ?bairro=, ?tipo=, ?vencidos=true
+    """
+    db = get_db()
+    rows = db.execute("SELECT * FROM materiais ORDER BY criado_em ASC").fetchall()
+    result = []
+    for r in rows:
+        r = dict(r)
+        r["data"] = r.pop("data_str")
+        r["dataRegistro"] = r.pop("data_registro")
+        r["user"] = r.pop("usuario")
+        result.append(r)
+
+    ano = request.args.get("ano")
+    data_inicio = request.args.get("data_inicio")
+    data_fim = request.args.get("data_fim")
+    bairro = request.args.get("bairro")
+    tipo = request.args.get("tipo")
+    vencidos = request.args.get("vencidos")
+
+    def data_efetiva(r):
+        return r.get("dataRegistro") or _data_iso_de_data_str(r["data"])
+
+    if ano:
+        result = [r for r in result if (data_efetiva(r) or "")[:4] == str(ano)]
+    if data_inicio:
+        result = [r for r in result if data_efetiva(r) and data_efetiva(r) >= data_inicio]
+    if data_fim:
+        result = [r for r in result if data_efetiva(r) and data_efetiva(r) <= data_fim]
+    if bairro:
+        result = [r for r in result if r.get("bairro") == bairro]
+    if tipo:
+        result = [r for r in result if r.get("tipo") == tipo]
+    if vencidos == "true":
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        result = [r for r in result if r.get("validade") and r["validade"] < hoje]
+
+    return jsonify(result)
+
+
+@app.route("/api/materiais", methods=["POST"])
+def criar_material():
+    """Cria um registro de movimentação de material (entrada ou saída)."""
+    data = request.get_json(force=True)
+    db = get_db()
+
+    if not data.get("tipo"):
+        return jsonify({"error": "Campo 'Tipo' é obrigatório."}), 400
+    if data.get("quantidade") is None:
+        return jsonify({"error": "Campo 'Quantidade' é obrigatório."}), 400
+
+    mat_id = data.get("id") or new_id()
+    db.execute(
+        """INSERT INTO materiais (id, tipo, descricao, data_str, data_registro, validade, quantidade, movimento, usuario, bairro)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (mat_id, data["tipo"], data.get("descricao", ""), data.get("data", now_str()),
+         data.get("dataRegistro"), data.get("validade"), data["quantidade"],
+         data.get("movimento", "entrada"), data.get("user"), data.get("bairro")),
+    )
+    db.commit()
+    return jsonify({"id": mat_id}), 201
+
+
+@app.route("/api/materiais/<mat_id>", methods=["DELETE"])
+def deletar_material(mat_id):
+    db = get_db()
+    db.execute("DELETE FROM materiais WHERE id = ?", (mat_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/materiais/analise", methods=["GET"])
+def analise_materiais():
+    """Área analítica: estoque atual (entradas - saídas) por tipo, itens
+    vencidos e itens próximos da validade (<=30 dias)."""
+    db = get_db()
+    rows = db.execute("SELECT * FROM materiais").fetchall()
+    rows = [dict(r) for r in rows]
+
+    estoque = {}
+    for r in rows:
+        tipo = r["tipo"]
+        estoque.setdefault(tipo, 0)
+        if r["movimento"] == "saida":
+            estoque[tipo] -= r["quantidade"]
+        else:
+            estoque[tipo] += r["quantidade"]
+
+    hoje = datetime.now().strftime("%Y-%m-%d")
+    em_30_dias = (datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).fromtimestamp(
+        datetime.now().timestamp() + 30 * 86400)).strftime("%Y-%m-%d")
+
+    vencidos = [r for r in rows if r.get("validade") and r["validade"] < hoje]
+    proximos_vencimento = [r for r in rows if r.get("validade") and hoje <= r["validade"] <= em_30_dias]
+
+    return jsonify({
+        "estoquePorTipo": estoque,
+        "vencidos": vencidos,
+        "proximosVencimento": proximos_vencimento,
+    })
+
+
+
 @app.route("/api/logs", methods=["GET"])
 def listar_logs():
     """Lista logs de auditoria. Filtros: ?usuario=xxx&modulo=xxx&limit=300"""
@@ -553,8 +870,131 @@ def criar_log():
 
 
 # ==================================================================
-# HEALTHCHECK
+# AUTENTICAÇÃO E GESTÃO DE USUÁRIOS
 # ==================================================================
+def _usuario_publico(row):
+    """Remove o hash de senha antes de retornar dados do usuário."""
+    return {
+        "username": row["username"],
+        "tipo": row["tipo"],
+        "bairro": row["bairro"],
+        "label": row["label"],
+        "deveTrocarSenha": bool(row["deve_trocar_senha"]),
+    }
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def login():
+    data = request.get_json(force=True)
+    username = (data.get("username") or "").strip().lower()
+    senha = data.get("password") or ""
+
+    db = get_db()
+    user = db.execute("SELECT * FROM usuarios WHERE username = ?", (username,)).fetchone()
+    if not user or not check_password_hash(user["senha_hash"], senha):
+        return jsonify({"error": "Usuário ou senha inválidos."}), 401
+
+    return jsonify(_usuario_publico(user))
+
+
+@app.route("/api/auth/trocar-senha", methods=["POST"])
+def trocar_senha():
+    """Permite que o próprio usuário troque sua senha (exige a senha atual).
+    Usado tanto para a troca obrigatória no primeiro login quanto para
+    trocas voluntárias posteriores."""
+    data = request.get_json(force=True)
+    username = (data.get("username") or "").strip().lower()
+    senha_atual = data.get("senhaAtual") or ""
+    senha_nova = data.get("senhaNova") or ""
+
+    if len(senha_nova) < 6:
+        return jsonify({"error": "A nova senha deve ter pelo menos 6 caracteres."}), 400
+
+    db = get_db()
+    user = db.execute("SELECT * FROM usuarios WHERE username = ?", (username,)).fetchone()
+    if not user or not check_password_hash(user["senha_hash"], senha_atual):
+        return jsonify({"error": "Senha atual incorreta."}), 401
+
+    novo_hash = generate_password_hash(senha_nova)
+    db.execute(
+        "UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 0, atualizado_em = datetime('now') WHERE username = ?",
+        (novo_hash, username),
+    )
+    db.commit()
+
+    log_id = new_id()
+    db.execute(
+        """INSERT INTO logs_auditoria (id, data_iso, data_str, usuario, bairro, modulo, acao, alvo, campo, valor_anterior, valor_novo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (log_id, datetime.now().isoformat(), now_str(), username, user["bairro"],
+         "Auth", "trocar-senha", username, "Senha", None, None),
+    )
+    db.commit()
+
+    user = db.execute("SELECT * FROM usuarios WHERE username = ?", (username,)).fetchone()
+    return jsonify(_usuario_publico(user))
+
+
+def _requer_diretoria(requester):
+    """Valida que o solicitante é da diretoria. Retorna o usuário ou None."""
+    if not requester:
+        return None
+    db = get_db()
+    user = db.execute("SELECT * FROM usuarios WHERE username = ?", (requester.strip().lower(),)).fetchone()
+    if not user or user["tipo"] != "diretoria":
+        return None
+    return user
+
+
+@app.route("/api/usuarios", methods=["GET"])
+def listar_usuarios():
+    """Lista todos os usuários (sem hashes de senha). Restrito à diretoria."""
+    requester = request.args.get("requester")
+    if not _requer_diretoria(requester):
+        return jsonify({"error": "Acesso restrito à diretoria."}), 403
+
+    db = get_db()
+    rows = db.execute("SELECT * FROM usuarios ORDER BY tipo DESC, username ASC").fetchall()
+    return jsonify([_usuario_publico(r) for r in rows])
+
+
+@app.route("/api/usuarios/<username>/redefinir-senha", methods=["POST"])
+def redefinir_senha(username):
+    """Diretoria define uma nova senha temporária para outro usuário.
+    O usuário afetado precisará trocá-la no próximo login."""
+    data = request.get_json(force=True)
+    requester_user = _requer_diretoria(data.get("requester"))
+    if not requester_user:
+        return jsonify({"error": "Acesso restrito à diretoria."}), 403
+
+    nova_senha = data.get("novaSenha") or ""
+    if len(nova_senha) < 6:
+        return jsonify({"error": "A nova senha deve ter pelo menos 6 caracteres."}), 400
+
+    username = username.strip().lower()
+    db = get_db()
+    target = db.execute("SELECT * FROM usuarios WHERE username = ?", (username,)).fetchone()
+    if not target:
+        return jsonify({"error": "Usuário não encontrado."}), 404
+
+    novo_hash = generate_password_hash(nova_senha)
+    db.execute(
+        "UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 1, atualizado_em = datetime('now') WHERE username = ?",
+        (novo_hash, username),
+    )
+
+    log_id = new_id()
+    db.execute(
+        """INSERT INTO logs_auditoria (id, data_iso, data_str, usuario, bairro, modulo, acao, alvo, campo, valor_anterior, valor_novo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (log_id, datetime.now().isoformat(), now_str(), requester_user["username"], requester_user["bairro"],
+         "Auth", "redefinir-senha", username, "Senha", None, None),
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "db": DB_PATH, "exists": os.path.exists(DB_PATH)})

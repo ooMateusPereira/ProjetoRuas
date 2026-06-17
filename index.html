@@ -58,9 +58,11 @@
         <button onclick="App.navigate('cadastrados')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Pessoas Cadastradas</button>
         <button onclick="App.navigate('tarefas')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Tarefas</button>
         <button onclick="App.navigate('dashboard')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Dashboard Analítico</button>
-        <button onclick="App.navigate('financeiro')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Gestão Financeira/Materiais</button>
+        <button onclick="App.navigate('financeiro')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Gestão Financeira</button>
+        <button onclick="App.navigate('materiais')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Materiais</button>
         <button onclick="App.navigate('formAdmin')" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Editar Formulários</button>
         <button onclick="App.navigate('logs')" class="diretoria-only hidden px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Logs / Auditoria</button>
+        <button onclick="App.navigate('usuarios')" class="diretoria-only hidden px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-left md:text-center">Gestão de Usuários</button>
         <button onclick="Auth.logout()" class="px-3 py-2 bg-red-500/80 hover:bg-red-600 rounded text-left md:text-center">Sair</button>
       </nav>
     </div>
@@ -89,10 +91,28 @@
         </div>
         <div id="loginError" class="text-red-600 bg-red-50 p-2 rounded text-sm hidden font-bold text-center border border-red-200"></div>
         <button type="submit" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg">Entrar</button>
-        <div class="text-[11px] text-gray-400 text-center leading-relaxed">
-          Perfis de demonstração: <strong>diretoria</strong> ou bairros (<strong>largodomacho</strong>, <strong>copacabana</strong>, <strong>tijuca</strong>, <strong>gloria</strong>, <strong>botafogo</strong>).<br>
-          Senha de demonstração: <strong>Demo@2026</strong>
+      </form>
+    </div>
+
+    <div id="view-trocarSenha" class="view max-w-sm mx-auto bg-white p-6 rounded-xl shadow-sm border border-emerald-100 mt-10">
+      <h2 class="text-lg font-bold text-emerald-900 mb-2 text-center">Defina sua Senha Definitiva</h2>
+      <p class="text-sm text-gray-500 mb-4 text-center">Por segurança, você precisa trocar a senha temporária antes de continuar.</p>
+      <form id="formTrocarSenha" class="space-y-4">
+        <div>
+          <label class="block text-sm font-bold mb-1">Senha Atual</label>
+          <input type="password" id="trocarSenhaAtual" required class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
         </div>
+        <div>
+          <label class="block text-sm font-bold mb-1">Nova Senha</label>
+          <input type="password" id="trocarSenhaNova" required minlength="6" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-sm font-bold mb-1">Confirmar Nova Senha</label>
+          <input type="password" id="trocarSenhaConfirma" required minlength="6" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+        </div>
+        <p class="text-[11px] text-gray-400">Mínimo de 6 caracteres.</p>
+        <div id="trocarSenhaError" class="text-red-600 bg-red-50 p-2 rounded text-sm hidden font-bold text-center border border-red-200"></div>
+        <button type="submit" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg">Salvar Nova Senha</button>
       </form>
     </div>
 
@@ -103,13 +123,22 @@
         <label class="block text-sm font-bold text-emerald-900 mb-2">Selecione o Perfil do Assistido:</label>
         <select id="selectPerfilTriagem" class="w-full p-3 border border-emerald-300 bg-emerald-50 rounded-lg outline-none font-bold text-emerald-900">
           <option value="adulto">🧑 Perfil Adulto</option>
-          <option value="crianca">🧒 Perfil Criança / Adolescente</option>
+          <option value="crianca">🧒 Perfil Criança</option>
+          <option value="adolescente">🧑‍🎓 Perfil Adolescente</option>
         </select>
       </div>
 
       <form id="formTriagemDinamico" class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100 space-y-4">
         <input type="hidden" id="editPacienteId" value="">
         <input type="hidden" id="editAtendimentoId" value="">
+        <div>
+          <label class="block text-sm font-bold text-emerald-900 mb-1">Bairro de Registro *</label>
+          <select id="triagemBairroRegistro" required class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white"></select>
+        </div>
+        <div>
+          <label class="block text-sm font-bold text-emerald-900 mb-1">Data do Atendimento</label>
+          <input type="date" id="triagemDataAtendimento" class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white">
+        </div>
         <div id="dynamicFieldsContainer" class="space-y-4"></div>
         <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow-md mt-4">Salvar Registro</button>
         <button type="button" id="btnCancelEdit" onclick="Prontuario.fecharEdicao()" class="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 rounded-lg shadow-md mt-2 hidden">Cancelar Edição</button>
@@ -151,6 +180,9 @@
         <div>
           <h2 class="text-2xl font-bold text-emerald-900" id="prontNome">Nome do Paciente</h2>
           <p class="text-sm text-gray-500 font-bold" id="prontPerfil">Perfil</p>
+          <div class="text-sm text-gray-500 mt-1 flex items-center gap-1">
+            <span class="font-bold">Bairro de Registro:</span> <span id="prontBairroRegistro"></span>
+          </div>
         </div>
         <button id="btnNovoAtendimento" onclick="Prontuario.iniciarNovoAtendimento()" class="mt-4 md:mt-0 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg shadow">+ Adicionar Evolução / Novo Atendimento</button>
       </div>
@@ -172,6 +204,9 @@
 
       <h3 class="font-bold text-emerald-900 mb-3 border-b pb-2">Linha do Tempo (Atendimentos, Tarefas e Alterações)</h3>
       <div id="prontTimeline" class="space-y-3 mb-6"></div>
+
+      <h3 class="font-bold text-emerald-900 mb-3 border-b pb-2">Histórico de Urgência</h3>
+      <div id="prontHistoricoUrgencia" class="mb-6 bg-white p-4 rounded-xl shadow-sm border border-emerald-100"></div>
 
       <h3 class="font-bold text-emerald-900 mb-3 border-b pb-2">Evoluções Clínicas / Sociais</h3>
       <div id="prontHistorico" class="space-y-4"></div>
@@ -247,10 +282,30 @@
           <label class="block text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">Contexto de Análise</label>
           <select id="selectContextoDashboard" onchange="Dashboard.alterarContexto(this.value)" class="w-full p-2 text-sm font-bold text-emerald-900 outline-none bg-emerald-50 rounded cursor-pointer">
             <option value="triagens">📋 Assistidos & Triagens da ONG</option>
-            <option value="economias">💰 Balanço Econômico & Materiais</option>
+            <option value="economias">💰 Balanço Econômico</option>
+            <option value="materiais">📦 Materiais (Estoque e Validade)</option>
             <option value="equipes" class="diretoria-only">👥 Geral por Equipe / Bairro</option>
           </select>
         </div>
+      </div>
+
+      <div id="containerFiltrosGerais" class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 mb-6 space-y-3">
+        <h3 class="text-xs font-bold text-emerald-900 uppercase tracking-wider border-b pb-1">Filtros de Período (afetam pacientes, financeiro e materiais)</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">Ano</label>
+            <select id="filtroAnoDashboard" onchange="Dashboard.render()" class="w-full p-2 border rounded text-sm outline-none"><option value="">Todos os anos</option></select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">Data Início</label>
+            <input type="date" id="filtroDataInicioDashboard" onchange="Dashboard.render()" class="w-full p-2 border rounded text-sm outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">Data Fim</label>
+            <input type="date" id="filtroDataFimDashboard" onchange="Dashboard.render()" class="w-full p-2 border rounded text-sm outline-none">
+          </div>
+        </div>
+        <button onclick="Dashboard.limparFiltrosPeriodo()" class="text-xs text-emerald-700 font-bold hover:underline">Limpar filtros de período</button>
       </div>
       
       <div class="flex flex-col sm:flex-row justify-end gap-3 mb-6">
@@ -269,7 +324,8 @@
             <span class="block text-xs font-bold text-gray-500 mb-1">Filtrar por Perfil:</span>
             <div class="flex flex-wrap gap-4 text-sm">
               <label class="flex items-center cursor-pointer font-bold text-gray-700"><input type="checkbox" value="adulto" class="chk-filtro-perfil mr-1 rounded" onchange="Dashboard.render()"> Adultos</label>
-              <label class="flex items-center cursor-pointer font-bold text-gray-700"><input type="checkbox" value="crianca" class="chk-filtro-perfil mr-1 rounded" onchange="Dashboard.render()"> Crianças/Adolescentes</label>
+              <label class="flex items-center cursor-pointer font-bold text-gray-700"><input type="checkbox" value="crianca" class="chk-filtro-perfil mr-1 rounded" onchange="Dashboard.render()"> Crianças</label>
+              <label class="flex items-center cursor-pointer font-bold text-gray-700"><input type="checkbox" value="adolescente" class="chk-filtro-perfil mr-1 rounded" onchange="Dashboard.render()"> Adolescentes</label>
             </div>
           </div>
           <div>
@@ -289,10 +345,15 @@
         <div class="bg-white p-4 rounded-xl border-l-4 border-red-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Alta Urgência Atual</h3><p id="dashKpiUrgencia" class="text-2xl font-bold text-red-600">0</p></div>
       </div>
 
-      <div id="containerKpisEconomia" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 hidden">
+      <div id="containerKpisEconomia" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 hidden">
         <div class="bg-white p-4 rounded-xl border-l-4 border-green-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Saldo em Caixa</h3><p id="dashKpiCaixa" class="text-2xl font-bold text-green-700">R$ 0,00</p></div>
         <div class="bg-white p-4 rounded-xl border-l-4 border-yellow-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Despesas Previstas</h3><p id="dashKpiPrevisto" class="text-2xl font-bold text-yellow-600">R$ 0,00</p></div>
-        <div class="bg-white p-4 rounded-xl border-l-4 border-blue-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Insumos Distribuídos</h3><p id="dashKpiMateriais" class="text-2xl font-bold text-blue-600">0 un.</p></div>
+      </div>
+
+      <div id="containerKpisMateriais" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 hidden">
+        <div class="bg-white p-4 rounded-xl border-l-4 border-green-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Total Entradas (Qtd)</h3><p id="dashKpiMatEntradas" class="text-2xl font-bold text-green-700">0</p></div>
+        <div class="bg-white p-4 rounded-xl border-l-4 border-red-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Total Saídas (Qtd)</h3><p id="dashKpiMatSaidas" class="text-2xl font-bold text-red-600">0</p></div>
+        <div class="bg-white p-4 rounded-xl border-l-4 border-yellow-500 shadow-sm"><h3 class="text-xs font-bold text-gray-500 uppercase">Itens Vencidos</h3><p id="dashKpiMatVencidos" class="text-2xl font-bold text-yellow-600">0</p></div>
       </div>
 
       <div id="containerKpisEquipes" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 hidden">
@@ -314,7 +375,7 @@
     </div>
 
     <div id="view-financeiro" class="view">
-      <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Controle Financeiro e Materiais</h2>
+      <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Gestão Financeira</h2>
       
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100">
@@ -326,7 +387,6 @@
                 <option value="renda">💰 Entrada (Doação/Renda)</option>
                 <option value="gasto">📉 Saída (Gasto Realizado)</option>
                 <option value="futuro">🗓️ Gasto Futuro (Previsão)</option>
-                <option value="material">📦 Material Utilizado/Distribuído</option>
               </select>
             </div>
             <div>
@@ -334,8 +394,12 @@
               <input type="text" id="finDesc" required placeholder="Ex: Compra de marmitas, cobertores..." class="w-full p-2 border rounded outline-none">
             </div>
             <div>
-              <label class="block text-sm font-bold mb-1">Valor (R$) ou Quantidade</label>
+              <label class="block text-sm font-bold mb-1">Valor (R$)</label>
               <input type="number" step="0.01" id="finValor" required class="w-full p-2 border rounded outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-bold mb-1">Data do Registro</label>
+              <input type="date" id="finDataRegistro" class="w-full p-2 border rounded outline-none">
             </div>
             <div id="finDataFuturaContainer" class="hidden">
               <label class="block text-sm font-bold mb-1">📅 Data Prevista do Gasto</label>
@@ -366,25 +430,110 @@
       </div>
     </div>
 
-    <div id="view-formAdmin" class="view max-w-2xl mx-auto">
+    <div id="view-materiais" class="view">
+      <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Gestão de Materiais</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-emerald-100">
+          <h3 class="font-bold text-emerald-800 border-b pb-2 mb-4">Nova Movimentação</h3>
+          <form id="formMaterial" class="space-y-3">
+            <div>
+              <label class="block text-sm font-bold mb-1">Movimento</label>
+              <select id="matMovimento" class="w-full p-2 border rounded outline-none bg-gray-50">
+                <option value="entrada">📥 Entrada (recebimento/doação)</option>
+                <option value="saida">📤 Saída (distribuição/uso)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-bold mb-1">Tipo *</label>
+              <input type="text" id="matTipo" required placeholder="Ex: Cobertor, Marmita, Kit Higiene..." class="w-full p-2 border rounded outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-bold mb-1">Descrição</label>
+              <input type="text" id="matDescricao" placeholder="Detalhes adicionais (opcional)" class="w-full p-2 border rounded outline-none">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-bold mb-1">Data *</label>
+                <input type="date" id="matData" required class="w-full p-2 border rounded outline-none">
+              </div>
+              <div>
+                <label class="block text-sm font-bold mb-1">Validade</label>
+                <input type="date" id="matValidade" class="w-full p-2 border rounded outline-none">
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-bold mb-1">Quantidade *</label>
+              <input type="number" step="1" min="0" id="matQuantidade" required class="w-full p-2 border rounded outline-none">
+            </div>
+            <button type="submit" class="w-full bg-emerald-600 text-white font-bold py-2 rounded">Salvar Movimentação</button>
+          </form>
+        </div>
+
+        <div class="space-y-4">
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100">
+            <h3 class="font-bold text-emerald-800 border-b pb-2 mb-2 text-sm">Estoque Atual por Tipo</h3>
+            <ul id="listaEstoqueMateriais" class="space-y-1 text-sm"></ul>
+          </div>
+          <div class="bg-red-50 p-4 rounded-xl border border-red-200">
+            <h3 class="font-bold text-red-700 border-b border-red-200 pb-2 mb-2 text-sm">⚠️ Itens Vencidos</h3>
+            <ul id="listaMateriaisVencidos" class="space-y-1 text-sm"></ul>
+          </div>
+          <div class="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+            <h3 class="font-bold text-yellow-700 border-b border-yellow-200 pb-2 mb-2 text-sm">⏳ Próximos da Validade (30 dias)</h3>
+            <ul id="listaMateriaisProximos" class="space-y-1 text-sm"></ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 mt-6">
+        <div class="flex flex-wrap gap-3 items-end mb-3">
+          <h3 class="font-bold text-emerald-800 text-sm flex-1">Movimentações</h3>
+          <select id="matFiltroTipo" class="p-2 border rounded text-sm outline-none"><option value="">Todos os tipos</option></select>
+          <select id="matFiltroAno" class="p-2 border rounded text-sm outline-none"><option value="">Todos os anos</option></select>
+          <div class="diretoria-only hidden">
+            <select id="matFiltroBairro" class="p-2 border rounded text-sm outline-none"></select>
+          </div>
+        </div>
+        <ul id="listaMovimentacoesMateriais" class="space-y-2 text-sm max-h-64 overflow-y-auto"></ul>
+      </div>
+    </div>
+
+
       <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Motor de Formulários por Perfil</h2>
       <div class="bg-white p-5 rounded-xl shadow-sm border mb-4">
         <label class="block text-sm font-bold mb-2">Editar Formulário de:</label>
         <select id="selectPerfilAdmin" class="w-full p-2 border rounded-lg outline-none font-bold">
           <option value="adulto">🧑 Perfil Adulto</option>
-          <option value="crianca">🧒 Perfil Criança / Adolescente</option>
+          <option value="crianca">🧒 Perfil Criança</option>
+          <option value="adolescente">🧑‍🎓 Perfil Adolescente</option>
         </select>
       </div>
       <form id="formAddField" class="bg-white p-5 rounded-xl shadow-sm border space-y-4 mb-6">
-        <h3 class="font-bold border-b pb-2">Adicionar Novo Campo</h3>
+        <h3 class="font-bold border-b pb-2">Adicionar Nova Pergunta</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div><label class="block text-sm font-bold mb-1">Título da Pergunta</label><input type="text" id="newFieldLabel" required class="w-full p-2 border rounded-lg outline-none"></div>
-          <div><label class="block text-sm font-bold mb-1">Tipo de Input</label><select id="newFieldType" class="w-full p-2 border rounded-lg outline-none"><option value="text">Texto Curto</option><option value="textarea">Texto Longo (Área)</option><option value="number">Número</option><option value="select">Múltipla Escolha (Select)</option></select></div>
+          <div>
+            <label class="block text-sm font-bold mb-1">Tipo</label>
+            <select id="newFieldType" class="w-full p-2 border rounded-lg outline-none">
+              <option value="text">Texto Curto</option>
+              <option value="textarea">Texto Longo (Área)</option>
+              <option value="number">Número</option>
+              <option value="date">Data</option>
+              <option value="select">Lista Suspensa (1 opção)</option>
+              <option value="checkbox">Múltipla Escolha (Caixas)</option>
+            </select>
+          </div>
         </div>
-        <div id="selectOptionsContainer" class="hidden"><label class="block text-sm font-bold mb-1">Opções (Separadas por vírgula)</label><input type="text" id="newFieldOptions" placeholder="Ex: Sim, Não" class="w-full p-2 border rounded-lg outline-none"></div>
-        <button type="submit" class="bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg">Adicionar Campo</button>
+        <div id="selectOptionsContainer" class="hidden">
+          <label class="block text-sm font-bold mb-1">Opções</label>
+          <div id="optionsBuilder" class="space-y-2"></div>
+          <button type="button" onclick="FormEngine.addOptionInput()" class="mt-2 text-sm text-emerald-700 font-bold hover:underline">+ Adicionar opção</button>
+          <p class="text-xs text-gray-400 mt-1">Mínimo de 2 opções.</p>
+        </div>
+        <button type="submit" class="bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg">Adicionar Pergunta</button>
       </form>
-      <div class="bg-white p-5 rounded-xl shadow-sm border"><h3 class="font-bold border-b pb-2 mb-4">Schema Atual</h3><ul id="schemaList" class="space-y-3"></ul></div>
+      <div class="bg-white p-5 rounded-xl shadow-sm border"><h3 class="font-bold border-b pb-2 mb-4">Perguntas Atuais</h3><ul id="schemaList" class="space-y-3"></ul></div>
     </div>
 
     <div id="view-logs" class="view max-w-3xl mx-auto">
@@ -397,6 +546,7 @@
           <option value="Prontuario">Prontuário</option>
           <option value="Tarefas">Tarefas</option>
           <option value="Financeiro">Financeiro</option>
+          <option value="Materiais">Materiais</option>
           <option value="Formularios">Formulários</option>
         </select>
       </div>
@@ -405,7 +555,49 @@
       </div>
     </div>
 
+    <div id="view-usuarios" class="view max-w-2xl mx-auto">
+      <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Gestão de Usuários</h2>
+      <p class="text-sm text-gray-500 mb-4">Apenas a diretoria pode redefinir senhas. O usuário afetado precisará trocar a senha temporária no próximo login.</p>
+      <div class="bg-white rounded-xl shadow-sm border border-emerald-100">
+        <ul id="listaUsuarios" class="divide-y"></ul>
+      </div>
+    </div>
+
+    <!-- Modal de redefinição de senha (Gestão de Usuários) -->
+    <div id="modalRedefinirSenha" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+        <h3 class="text-lg font-bold text-emerald-900 mb-2">Redefinir Senha</h3>
+        <p class="text-sm text-gray-500 mb-4">Usuário: <strong id="redefinirSenhaUsername"></strong></p>
+        <form id="formRedefinirSenha" class="space-y-3">
+          <div>
+            <label class="block text-sm font-bold mb-1">Nova Senha Temporária</label>
+            <input type="password" id="redefinirSenhaNova" required minlength="6" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+          </div>
+          <p class="text-[11px] text-gray-400">Mínimo de 6 caracteres. O usuário será obrigado a trocá-la no próximo login.</p>
+          <div id="redefinirSenhaError" class="text-red-600 bg-red-50 p-2 rounded text-sm hidden font-bold text-center border border-red-200"></div>
+          <div class="flex gap-2">
+            <button type="button" onclick="Usuarios.fecharModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 rounded-lg">Cancelar</button>
+            <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg">Confirmar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
   </main>
+
+  <!-- Modal de Classificação de Urgência (requisito 3) -->
+  <div id="modalUrgencia" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+      <h3 class="text-lg font-bold text-emerald-900 mb-2">Classificação de Urgência</h3>
+      <p class="text-sm text-gray-500 mb-4">Selecione o nível de urgência para finalizar o registro.</p>
+      <div class="space-y-2">
+        <button onclick="Prontuario.confirmarUrgenciaESalvar('ALTA')" class="w-full text-left p-3 rounded-lg border border-red-300 bg-red-50 hover:bg-red-100 font-bold text-red-700">🔴 Alta</button>
+        <button onclick="Prontuario.confirmarUrgenciaESalvar('MÉDIA')" class="w-full text-left p-3 rounded-lg border border-yellow-300 bg-yellow-50 hover:bg-yellow-100 font-bold text-yellow-700">🟡 Média</button>
+        <button onclick="Prontuario.confirmarUrgenciaESalvar('BAIXA')" class="w-full text-left p-3 rounded-lg border border-green-300 bg-green-50 hover:bg-green-100 font-bold text-green-700">🟢 Baixa</button>
+      </div>
+    </div>
+  </div>
+
   
   <div id="notification-container" class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none"></div>
 
