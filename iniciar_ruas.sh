@@ -16,6 +16,8 @@ sudo systemctl restart nginx
 # 2. Subir/atualizar o backend Flask via Docker
 echo "🐳 Atualizando backend (Flask + SQLite) via Docker..."
 cd /var/www/projetoruas || { echo "❌ Erro: Pasta do projeto não encontrada!"; exit 1; }
+sudo mkdir -p /home/mateus/projetoruas-data
+sudo chown -R "$USER":"$USER" /home/mateus/projetoruas-data
 sudo docker compose up -d --build
 
 # 3. Derrubar processos antigos (webhook e túneis)
