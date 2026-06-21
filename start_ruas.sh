@@ -13,9 +13,18 @@ sudo chown -R www-data:www-data /var/www/projetoruas
 echo "⚙️  Reiniciando Nginx..."
 sudo systemctl restart nginx
 
-# 2. Subir/atualizar o backend Flask via Docker
-echo "🐳 Atualizando backend (Flask + SQLite) via Docker..."
+# 2. Subir/atualizar o backend Flask + túnel nomeado via Docker
+echo "🐳 Atualizando backend (Flask + SQLite) e túnel Cloudflare via Docker..."
 cd /var/www/projetoruas || { echo "❌ Erro: Pasta do projeto não encontrada!"; exit 1; }
+sudo mkdir -p /home/mateus/projetoruas-data
+sudo chown -R "$USER":"$USER" /home/mateus/projetoruas-data
+
+if [ ! -f .env ]; then
+  echo "❌ Arquivo .env não encontrado em /var/www/projetoruas/."
+  echo "   Copie .env.example para .env e preencha CLOUDFLARE_TUNNEL_TOKEN antes de continuar."
+  exit 1
+fi
+
 sudo docker compose up -d --build
 
 # 3. Derrubar processos antigos (webhook e túneis)
@@ -58,10 +67,10 @@ else
   echo "⚠️  Backend Docker: NÃO está rodando — verifique com 'docker compose logs'"
 fi
 
-if curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/api/health | grep -q "200"; then
+if curl -s -o /dev/null -w "%{http_code}" http://localhost:5481/api/health | grep -q "200"; then
   echo "✅ API Flask respondendo em /api/health"
 else
-  echo "⚠️  API Flask não respondeu em http://localhost:5000/api/health"
+  echo "⚠️  API Flask não respondeu em http://localhost:5481/api/health"
 fi
 
 if systemctl is-active --quiet nginx; then
@@ -70,11 +79,18 @@ else
   echo "⚠️  Nginx: NÃO está ativo"
 fi
 
+if sudo docker compose -f /var/www/projetoruas/docker-compose.yml ps --status running | grep -q ruas-tunnel; then
+  echo "✅ Túnel Cloudflare do Ruas (ruas-tunnel): rodando"
+else
+  echo "⚠️  Túnel Cloudflare do Ruas (ruas-tunnel): NÃO está rodando — verifique 'docker compose logs ruas-tunnel'"
+fi
+
 SITE_URL=$(grep -o 'https://[a-zA-Z0-9.-]*trycloudflare.com' /tmp/cf_site.log | head -n1)
 WEBHOOK_URL=$(grep -o 'https://[a-zA-Z0-9.-]*trycloudflare.com' /tmp/cf_webhook.log | head -n1)
 
 echo "----------------------------------------"
-echo "🌐 URL do site (túnel)   : ${SITE_URL:-aguardando... veja /tmp/cf_site.log}"
-echo "🔗 URL do webhook (túnel): ${WEBHOOK_URL:-aguardando... veja /tmp/cf_webhook.log}"
+echo "🌐 URL do site (túnel)      : ${SITE_URL:-aguardando... veja /tmp/cf_site.log}"
+echo "🔗 URL do webhook (túnel)   : ${WEBHOOK_URL:-aguardando... veja /tmp/cf_webhook.log}"
+echo "🏥 Cadastro Ágil Ruas (fixo): https://ruas.homelabmateusp.com"
 echo "----------------------------------------"
 echo "✅ Script finalizado."

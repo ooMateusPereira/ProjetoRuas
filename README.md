@@ -82,41 +82,82 @@ nova senha temporária, que força o usuário afetado a trocá-la no próximo
 login). Toda troca/redefinição de senha é registrada em auditoria
 (`/api/logs`, módulo `Auth`).
 
-## Integração com seu setup atual (Nginx + Cloudflare Tunnel)
+## Domínio próprio via túnel nomeado (ruas.homelabmateusp.com)
 
-Seu Nginx provavelmente já serve `/var/www/projetoruas` como arquivos
-estáticos na porta 8080. Agora que o Flask serve tanto a API quanto o
-frontend na porta 5000, você tem duas opções:
+O backend roda na porta **5481** do host (mapeada para a 5000 do
+container — ver `docker-compose.yml`), escolhida para não conflitar com
+outros serviços já em uso no servidor (portas 5000, 8080 e 8765 ocupadas
+por outros projetos).
 
-**Opção A — Nginx como proxy para o container (recomendado)**
-Aponte o `server` do Nginx que hoje serve `root /var/www/projetoruas;`
-para fazer proxy_pass ao container:
+Diferente dos *quick tunnels* (`cloudflared tunnel --url ...`, URL
+aleatória a cada reinício), aqui usamos um **túnel nomeado**, criado e
+gerenciado pelo painel da Cloudflare (Zero Trust → Networks → Tunnels),
+com um token fixo — a URL não muda mais.
 
-```nginx
-server {
-    listen 8080;
-    location / {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
+O túnel agora roda como **serviço `ruas-tunnel` dentro do próprio
+`docker-compose.yml`** do projeto (junto com `ruas-backend`), na mesma
+rede Docker `ruas-net`. Isso garante que ele suba/desça junto com o
+backend, com `restart: unless-stopped`, sem depender de um `docker run`
+avulso rodado manualmente.
+
+### 1. Configurar o token (uma vez só, no servidor)
+
+O token **nunca** vai para o Git. Copie o modelo e preencha localmente:
+
+```bash
+cd /var/www/projetoruas
+cp .env.example .env
+nano .env   # cole o token depois de CLOUDFLARE_TUNNEL_TOKEN=
 ```
 
-Assim o túnel cloudflared (`http://localhost:8080`) continua igual,
-mas agora o Nginx repassa tudo (frontend + `/api/*`) para o Flask.
+O token fica em **Zero Trust → Networks → Tunnels → (seu túnel) →
+Configure → Install and run a connector**, é o valor depois de `--token`.
 
-**Opção B — Nginx serve estático e faz proxy só de `/api`**
-Mantém `root /var/www/projetoruas;` para `index.html`/`app.js`, e
-adiciona:
+### 2. Subir backend + túnel
 
-```nginx
-location /api/ {
-    proxy_pass http://127.0.0.1:5000/api/;
-}
+```bash
+sudo mkdir -p /home/mateus/projetoruas-data
+sudo chown -R mateus:mateus /home/mateus/projetoruas-data
+sudo docker compose up -d --build
+curl http://localhost:5481/api/health   # deve responder {"status":"ok",...}
+sudo docker compose logs ruas-tunnel    # confirma que o túnel conectou
 ```
 
-Qualquer uma funciona — a A é mais simples de manter.
+### 3. Configurar o Public Hostname no painel da Cloudflare
+
+Em **Zero Trust → Networks → Tunnels → (seu túnel) → Public Hostname → Add a public hostname**:
+
+| Campo | Valor |
+|---|---|
+| Subdomain | `ruas` |
+| Domain | `homelabmateusp.com` |
+| Type | `HTTP` |
+| URL | `ruas-backend:5000` |
+
+> ⚠️ O valor da URL é `ruas-backend:5000` (nome do serviço Docker + porta
+> **interna** do container), não `localhost:5481`. Como o túnel agora
+> roda dentro da mesma rede Docker (`ruas-net`), ele acessa o backend
+> pelo nome do serviço — `localhost` dentro do container `ruas-tunnel`
+> se referiria a ele mesmo, não ao host.
+
+Isso cria automaticamente o registro DNS (`CNAME ruas → <tunnel-id>.cfargotunnel.com`)
+e a regra de roteamento do túnel — não precisa mexer no DNS manualmente.
+
+### 4. Testar
+
+```bash
+curl https://ruas.homelabmateusp.com/api/health
+```
+
+Se responder `{"status":"ok",...}`, o domínio está servindo o backend
+corretamente, com frontend e API juntos (Flask serve ambos).
+
+### Sobre o túnel "Personal" que já usa a porta 8080
+
+Esse túnel do Cadastro Ágil Ruas é independente — ele não usa a porta
+8080 nem interfere no túnel "Personal" já existente. Cada túnel nomeado
+tem seu próprio hostname público e pode apontar para portas/serviços
+diferentes no mesmo servidor.
 
 ## Scripts de start/stop
 
