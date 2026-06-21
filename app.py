@@ -962,8 +962,8 @@ def listar_usuarios():
 
 @app.route("/api/usuarios/<username>/redefinir-senha", methods=["POST"])
 def redefinir_senha(username):
-    """Diretoria define uma nova senha temporária para outro usuário.
-    O usuário afetado precisará trocá-la no próximo login."""
+    """Diretoria define uma nova senha para outro usuário.
+    O usuário pode trocá-la depois se quiser, mas não é obrigado."""
     data = request.get_json(force=True)
     requester_user = _requer_diretoria(data.get("requester"))
     if not requester_user:
@@ -981,7 +981,7 @@ def redefinir_senha(username):
 
     novo_hash = generate_password_hash(nova_senha)
     db.execute(
-        "UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 1, atualizado_em = datetime('now') WHERE username = ?",
+        "UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 0, atualizado_em = datetime('now') WHERE username = ?",
         (novo_hash, username),
     )
 

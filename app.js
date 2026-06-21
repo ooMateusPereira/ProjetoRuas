@@ -306,7 +306,7 @@ const Usuarios = {
           <div>
             <span class="font-bold">${Utils.escapeHTML(u.label)}</span>
             <span class="text-xs text-gray-400 block">@${Utils.escapeHTML(u.username)} • ${u.tipo === 'diretoria' ? 'Diretoria' : 'Operacional'}</span>
-            ${u.deveTrocarSenha ? `<span class="text-[10px] text-yellow-600 font-bold">⏳ Aguardando troca de senha</span>` : `<span class="text-[10px] text-green-600 font-bold">✅ Senha definitiva ativa</span>`}
+            <span class="text-[10px] text-green-600 font-bold">✅ Senha ativa</span>
           </div>
           <button onclick="Usuarios.abrirModal('${u.username}', '${Utils.escapeHTML(u.label)}')" class="bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1 rounded text-xs font-bold">Redefinir Senha</button>
         </li>`).join('');
@@ -338,7 +338,7 @@ const Usuarios = {
       const data = await res.json();
       if (!res.ok) { err.innerText = data.error || 'Erro ao redefinir senha.'; err.classList.remove('hidden'); return; }
       Auditoria.registrar('Auth', 'redefinir-senha', Usuarios.pendingUsername);
-      Utils.notify('Senha redefinida. O usuário deverá trocá-la no próximo login.');
+      Utils.notify('Senha redefinida com sucesso.');
       Usuarios.fecharModal();
       Usuarios.render();
     } catch (ex) {

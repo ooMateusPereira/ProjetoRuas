@@ -557,7 +557,7 @@
 
     <div id="view-usuarios" class="view max-w-2xl mx-auto">
       <h2 class="text-xl font-bold text-emerald-900 mb-4 font-display">Gestão de Usuários</h2>
-      <p class="text-sm text-gray-500 mb-4">Apenas a diretoria pode redefinir senhas. O usuário afetado precisará trocar a senha temporária no próximo login.</p>
+      <p class="text-sm text-gray-500 mb-4">Apenas a diretoria pode redefinir senhas. O usuário afetado pode trocar a nova senha quando quiser.</p>
       <div class="bg-white rounded-xl shadow-sm border border-emerald-100">
         <ul id="listaUsuarios" class="divide-y"></ul>
       </div>
@@ -570,10 +570,10 @@
         <p class="text-sm text-gray-500 mb-4">Usuário: <strong id="redefinirSenhaUsername"></strong></p>
         <form id="formRedefinirSenha" class="space-y-3">
           <div>
-            <label class="block text-sm font-bold mb-1">Nova Senha Temporária</label>
+            <label class="block text-sm font-bold mb-1">Nova Senha</label>
             <input type="password" id="redefinirSenhaNova" required minlength="6" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
           </div>
-          <p class="text-[11px] text-gray-400">Mínimo de 6 caracteres. O usuário será obrigado a trocá-la no próximo login.</p>
+          <p class="text-[11px] text-gray-400">Mínimo de 6 caracteres. O usuário poderá trocá-la depois, se quiser.</p>
           <div id="redefinirSenhaError" class="text-red-600 bg-red-50 p-2 rounded text-sm hidden font-bold text-center border border-red-200"></div>
           <div class="flex gap-2">
             <button type="button" onclick="Usuarios.fecharModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 rounded-lg">Cancelar</button>
