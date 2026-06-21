@@ -4,13 +4,28 @@ services:
     container_name: ruas-backend
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      # Porta alternativa no host (5481) para evitar conflito com outros serviços
+      # já em uso no homelab (5000, 8080, 8765...). Dentro do container o Flask
+      # continua na 5000; só a porta exposta no HOST muda.
+      - "5481:5000"
     volumes:
       # Persistência do SQLite fora de /var/www (que é read-only neste servidor
       # para criação de novos arquivos/pastas via bind mount)
       - /home/mateus/projetoruas-data:/app/data
     environment:
       - DATABASE_PATH=/app/data/database.db
+    networks:
+      - ruas-net
+
+  ruas-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: ruas-tunnel
+    restart: unless-stopped
+    # Túnel nomeado fixo: ruas.homelabmateusp.com -> ruas-backend:5000
+    # O token vem do arquivo .env (NÃO versionado no Git - veja .gitignore)
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - ruas-backend
     networks:
       - ruas-net
 
