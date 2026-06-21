@@ -70,17 +70,25 @@ script quando chegar a hora.
 
 Os usuários (`diretoria`, `largodomacho`, `copacabana`, `tijuca`, `gloria`,
 `botafogo`) são criados automaticamente na primeira execução com senha
-inicial **`Demo2026`** (hash bcrypt/Werkzeug no banco, não em texto puro).
+inicial padronizada **`<usuario>2026`** (ex: `diretoria2026`, `tijuca2026`)
+— hash bcrypt/Werkzeug no banco, nunca em texto puro.
 
-No primeiro login (qualquer perfil, incluindo diretoria), o sistema exige
-a troca obrigatória dessa senha temporária antes de liberar o acesso ao
-restante do sistema.
+> ⚠️ **Nota de segurança**: por decisão explícita do responsável pelo
+> projeto, a troca de senha **não é obrigatória** no primeiro login (nem
+> mesmo para a conta `diretoria`). Isso significa que, enquanto um usuário
+> não trocar voluntariamente sua senha, ela permanece no padrão previsível
+> `<usuario>2026` — incluindo a conta de acesso total. Como o sistema está
+> exposto publicamente via `ruas.homelabmateusp.com`, recomienda-se mudar
+> a senha da conta `diretoria` o quanto antes pela própria tela de login
+> ou por "Gestão de Usuários".
 
-Depois disso, **somente o perfil `diretoria`** tem acesso à aba "Gestão de
-Usuários", de onde pode redefinir a senha de qualquer usuário (gerando uma
-nova senha temporária, que força o usuário afetado a trocá-la no próximo
-login). Toda troca/redefinição de senha é registrada em auditoria
-(`/api/logs`, módulo `Auth`).
+Qualquer usuário pode trocar a própria senha voluntariamente a qualquer
+momento. Além disso, **somente o perfil `diretoria`** tem acesso à aba
+"Gestão de Usuários", de onde pode redefinir a senha de qualquer usuário
+(gerando uma senha temporária que força o usuário afetado a trocá-la no
+próximo login — diferente do cadastro inicial, essa redefinição manual
+continua exigindo troca). Toda troca/redefinição de senha é registrada em
+auditoria (`/api/logs`, módulo `Auth`).
 
 ## Domínio próprio via túnel nomeado (ruas.homelabmateusp.com)
 

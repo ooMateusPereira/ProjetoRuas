@@ -120,11 +120,12 @@ def init_db():
             )
         conn.commit()
 
-    # Popular usuários padrão se ainda não existirem (senha inicial: Demo2026,
-    # com troca obrigatória no primeiro login - requisito de segurança)
+    # Popular usuários padrão se ainda não existirem.
+    # Senha inicial de cada conta: "<usuario>2026" (ex: diretoria2026, tijuca2026).
+    # Sem troca obrigatória - o usuário pode trocar quando quiser pela própria conta
+    # ou a diretoria pode redefinir a senha de qualquer um a qualquer momento.
     cur = conn.execute("SELECT COUNT(*) FROM usuarios")
     if cur.fetchone()[0] == 0:
-        senha_inicial_hash = generate_password_hash("Demo2026")
         usuarios_padrao = [
             ("diretoria", "diretoria", None, "Diretoria (Acesso Total)"),
             ("largodomacho", "operacional", "largodomacho", "Largo do Machio"),
@@ -134,10 +135,11 @@ def init_db():
             ("botafogo", "operacional", "botafogo", "Botafogo"),
         ]
         for username, tipo, bairro, label in usuarios_padrao:
+            senha_padrao_hash = generate_password_hash(f"{username}2026")
             conn.execute(
                 """INSERT INTO usuarios (username, senha_hash, tipo, bairro, label, deve_trocar_senha)
-                   VALUES (?, ?, ?, ?, ?, 1)""",
-                (username, senha_inicial_hash, tipo, bairro, label),
+                   VALUES (?, ?, ?, ?, ?, 0)""",
+                (username, senha_padrao_hash, tipo, bairro, label),
             )
         conn.commit()
     conn.close()
