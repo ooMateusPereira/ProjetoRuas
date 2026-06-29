@@ -2,10 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Dependências do sistema (sqlite já vem embutido no python, mas garantimos libs)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    sqlite3 \
-    && rm -rf /var/lib/apt/lists/*
+# sqlite3 já vem embutido no Python — não precisa de apt-get
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
