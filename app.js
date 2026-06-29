@@ -8,16 +8,13 @@ const SESSION_PERSIST_KEY = 'ruas_saved_session';
 const LOG_KEY = 'ruas_log_db';
 const DARKMODE_KEY = 'ruas_darkmode';
 const MATERIAIS_KEY = 'ruas_materiais_db';
+const BAIRROS_KEY = 'ruas_bairros_db';
 
 // Bairros / Equipes operacionais (segmentação de dados conforme requisitos)
-const BAIRROS = ['largodomacho', 'copacabana', 'tijuca', 'gloria', 'botafogo'];
-const BAIRROS_LABELS = {
-  largodomacho: 'Largo do Machio',
-  copacabana: 'Copacabana',
-  tijuca: 'Tijuca',
-  gloria: 'Glória',
-  botafogo: 'Botafogo'
-};
+// BAIRROS e BAIRROS_LABELS são carregados dinamicamente da API (/api/bairros)
+// e populados pelo Backend.init() — não são mais constantes hardcoded.
+let BAIRROS = [];
+let BAIRROS_LABELS = {};
 
 // Perfis de acesso: diretoria vê tudo; operacionais veem apenas o próprio bairro
 const PERFIS_USUARIO = {
@@ -80,17 +77,18 @@ const Utils = {
 const API_BASE = '/api';
 
 const Backend = {
-  cache: { [PACIENTES_KEY]: [], [SCHEMA_KEY]: null, [FINANCEIRO_KEY]: [], [TAREFAS_KEY]: [], [LOG_KEY]: [], [MATERIAIS_KEY]: [] },
+  cache: { [PACIENTES_KEY]: [], [SCHEMA_KEY]: null, [FINANCEIRO_KEY]: [], [TAREFAS_KEY]: [], [LOG_KEY]: [], [MATERIAIS_KEY]: [], [BAIRROS_KEY]: [] },
 
   init: async () => {
     try {
-      const [rSch, rPac, rTar, rFin, rLog, rMat] = await Promise.all([
+      const [rSch, rPac, rTar, rFin, rLog, rMat, rBairros] = await Promise.all([
         fetch(`${API_BASE}/schemas`),
         fetch(`${API_BASE}/pacientes`),
         fetch(`${API_BASE}/tarefas`),
         fetch(`${API_BASE}/financeiro`),
         fetch(`${API_BASE}/logs`),
-        fetch(`${API_BASE}/materiais`)
+        fetch(`${API_BASE}/materiais`),
+        fetch(`${API_BASE}/bairros`)
       ]);
       Backend.cache[SCHEMA_KEY] = await rSch.json();
       Backend.cache[PACIENTES_KEY] = await rPac.json();
@@ -98,10 +96,20 @@ const Backend = {
       Backend.cache[FINANCEIRO_KEY] = await rFin.json();
       Backend.cache[LOG_KEY] = await rLog.json();
       Backend.cache[MATERIAIS_KEY] = await rMat.json();
+      Backend.cache[BAIRROS_KEY] = await rBairros.json();
+      Backend._sincronizarBairros();
     } catch (e) {
       console.error("Falha ao conectar no backend Flask/SQLite.", e);
       Utils.notify('Não foi possível conectar ao servidor. Verifique se o backend está rodando.', 'erro');
     }
+  },
+
+  // Sincroniza as variáveis globais BAIRROS e BAIRROS_LABELS com o cache da API
+  _sincronizarBairros: () => {
+    const lista = Backend.cache[BAIRROS_KEY] || [];
+    BAIRROS = lista.map(b => b.chave);
+    BAIRROS_LABELS = {};
+    lista.forEach(b => { BAIRROS_LABELS[b.chave] = b.label; });
   },
 
   get: (key) => Backend.cache[key],
@@ -114,7 +122,8 @@ const Backend = {
       [FINANCEIRO_KEY]: '/financeiro',
       [LOG_KEY]: '/logs',
       [SCHEMA_KEY]: '/schemas',
-      [MATERIAIS_KEY]: '/materiais'
+      [MATERIAIS_KEY]: '/materiais',
+      [BAIRROS_KEY]: '/bairros'
     };
     const res = await fetch(`${API_BASE}${endpoints[key]}`);
     Backend.cache[key] = await res.json();
@@ -213,6 +222,31 @@ const Backend = {
   registrarLog: async (log) => {
     Backend.cache[LOG_KEY].unshift(log); // exibição imediata
     fetch(`${API_BASE}/logs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(log) }).catch(e => console.error('Erro ao salvar log:', e));
+  },
+
+  // ===== Bairros =====
+  getBairros: () => Backend.cache[BAIRROS_KEY] || [],
+  criarBairro: async (label) => {
+    const res = await fetch(`${API_BASE}/bairros`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, requester: App.currentUser.username }) });
+    const data = await res.json();
+    if (!res.ok) { Utils.notify(data.error || 'Erro ao criar bairro', 'erro'); throw new Error(data.error); }
+    await Backend.refresh(BAIRROS_KEY);
+    Backend._sincronizarBairros();
+    return data;
+  },
+  editarBairro: async (chave, novoLabel) => {
+    const res = await fetch(`${API_BASE}/bairros/${chave}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: novoLabel, requester: App.currentUser.username }) });
+    const data = await res.json();
+    if (!res.ok) { Utils.notify(data.error || 'Erro ao renomear bairro', 'erro'); throw new Error(data.error); }
+    await Backend.refresh(BAIRROS_KEY);
+    Backend._sincronizarBairros();
+  },
+  deletarBairro: async (chave) => {
+    const res = await fetch(`${API_BASE}/bairros/${chave}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requester: App.currentUser.username }) });
+    const data = await res.json();
+    if (!res.ok) { Utils.notify(data.error || 'Erro ao remover bairro', 'erro'); throw new Error(data.error); }
+    await Backend.refresh(BAIRROS_KEY);
+    Backend._sincronizarBairros();
   },
 
   // ===== Materiais =====
@@ -347,6 +381,79 @@ const Usuarios = {
   }
 };
 
+
+// ==========================================
+// MÓDULO DE GESTÃO DE BAIRROS (restrito à diretoria)
+// ==========================================
+const GestaBairros = {
+  init: () => {
+    const form = document.getElementById('formNovoBairro');
+    if (form) form.addEventListener('submit', GestaBairros.criar);
+  },
+  render: () => {
+    if (!App.currentUser || App.currentUser.tipo !== 'diretoria') return;
+    const lista = Backend.getBairros();
+    const cont = document.getElementById('listaBairros');
+    if (!cont) return;
+    cont.innerHTML = lista.length ? lista.map(b => `
+      <li class="flex justify-between items-center p-3 border-b" id="bairro-row-${b.chave}">
+        <div id="bairro-display-${b.chave}" class="flex-1 flex items-center gap-2">
+          <span class="font-bold text-gray-700">${Utils.escapeHTML(b.label)}</span>
+          <span class="text-xs text-gray-400">@${Utils.escapeHTML(b.chave)}</span>
+        </div>
+        <div id="bairro-edit-${b.chave}" class="hidden flex-1 flex gap-2 items-center">
+          <input type="text" id="bairro-input-${b.chave}" value="${Utils.escapeHTML(b.label)}" class="flex-1 p-1 border rounded text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+          <button onclick="GestaBairros.confirmarEdicao('${b.chave}')" class="text-emerald-700 font-bold text-xs hover:underline">Salvar</button>
+          <button onclick="GestaBairros.cancelarEdicao('${b.chave}')" class="text-gray-500 font-bold text-xs hover:underline">Cancelar</button>
+        </div>
+        <div class="flex gap-2 ml-2">
+          <button onclick="GestaBairros.iniciarEdicao('${b.chave}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold px-2 py-1 rounded border border-blue-200 hover:bg-blue-50">Renomear</button>
+          <button onclick="GestaBairros.remover('${b.chave}', '${Utils.escapeHTML(b.label)}')" class="text-red-500 hover:text-red-700 text-xs font-bold px-2 py-1 rounded border border-red-200 hover:bg-red-50">Remover</button>
+        </div>
+      </li>`).join('') : '<li class="p-4 text-sm text-gray-400 text-center">Nenhum bairro cadastrado.</li>';
+  },
+  criar: async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('novoBairroLabel');
+    const label = input.value.trim();
+    if (!label) return;
+    try {
+      await Backend.criarBairro(label);
+      input.value = '';
+      GestaBairros.render();
+      Auditoria.registrar('Bairros', 'criar', label);
+      Utils.notify(`Bairro "${label}" adicionado`);
+    } catch (err) {}
+  },
+  iniciarEdicao: (chave) => {
+    document.getElementById(`bairro-display-${chave}`).classList.add('hidden');
+    document.getElementById(`bairro-edit-${chave}`).classList.remove('hidden');
+    document.getElementById(`bairro-input-${chave}`).focus();
+  },
+  cancelarEdicao: (chave) => {
+    document.getElementById(`bairro-display-${chave}`).classList.remove('hidden');
+    document.getElementById(`bairro-edit-${chave}`).classList.add('hidden');
+  },
+  confirmarEdicao: async (chave) => {
+    const novoLabel = document.getElementById(`bairro-input-${chave}`).value.trim();
+    if (!novoLabel) return;
+    try {
+      await Backend.editarBairro(chave, novoLabel);
+      GestaBairros.render();
+      Auditoria.registrar('Bairros', 'renomear', chave);
+      Utils.notify('Bairro renomeado');
+    } catch (err) {}
+  },
+  remover: async (chave, label) => {
+    if (!confirm(`Remover o bairro "${label}"?\n\nIsto só é possível se não houver pacientes ou usuários vinculados a ele.`)) return;
+    try {
+      await Backend.deletarBairro(chave);
+      GestaBairros.render();
+      Auditoria.registrar('Bairros', 'excluir', label);
+      Utils.notify(`Bairro "${label}" removido`);
+    } catch (err) {}
+  }
+};
 
 const Tarefas = {
   PRIORIDADES: ['Baixa', 'Média', 'Alta', 'Urgente'],
@@ -1455,7 +1562,7 @@ const App = {
       document.getElementById('buscaGlobal').addEventListener('keyup', App.buscaGlobal);
     }
     
-    FormEngine.initAdmin(); Prontuario.init(); Financeiro.init(); Tarefas.init(); Materiais.init(); Usuarios.init();
+    FormEngine.initAdmin(); Prontuario.init(); Financeiro.init(); Tarefas.init(); Materiais.init(); Usuarios.init(); GestaBairros.init();
     if (document.getElementById('listaLogs')) Auditoria.initFiltros();
     Auth.init();
   },
@@ -1542,7 +1649,7 @@ const App = {
     if (viewId === 'materiais') Materiais.render();
     if (viewId === 'tarefas') Tarefas.render();
     if (viewId === 'logs') Auditoria.render();
-    if (viewId === 'usuarios') Usuarios.render();
+    if (viewId === 'usuarios') { Usuarios.render(); GestaBairros.render(); }
     window.scrollTo(0, 0);
   }
 };

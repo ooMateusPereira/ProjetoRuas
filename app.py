@@ -120,6 +120,23 @@ def init_db():
             )
         conn.commit()
 
+    # Popular bairros padrão se ainda não existirem
+    cur = conn.execute("SELECT COUNT(*) FROM bairros")
+    if cur.fetchone()[0] == 0:
+        bairros_padrao = [
+            ("largodomacho", "Largo do Machio", 1),
+            ("copacabana", "Copacabana", 2),
+            ("tijuca", "Tijuca", 3),
+            ("gloria", "Glória", 4),
+            ("botafogo", "Botafogo", 5),
+        ]
+        for chave, label, ordem in bairros_padrao:
+            conn.execute(
+                "INSERT INTO bairros (chave, label, ordem) VALUES (?, ?, ?)",
+                (chave, label, ordem),
+            )
+        conn.commit()
+
     # Popular usuários padrão se ainda não existirem.
     # Senha inicial de cada conta: "<usuario>2026" (ex: diretoria2026, tijuca2026).
     # Sem troca obrigatória - o usuário pode trocar quando quiser pela própria conta
@@ -869,6 +886,115 @@ def criar_log():
     )
     db.commit()
     return jsonify({"id": log_id}), 201
+
+
+# ==================================================================
+# BAIRROS (CRUD — restrito à diretoria)
+# ==================================================================
+@app.route("/api/bairros", methods=["GET"])
+def listar_bairros():
+    """Retorna todos os bairros ordenados. Usado pelo frontend para popular listas."""
+    db = get_db()
+    rows = db.execute("SELECT * FROM bairros ORDER BY ordem ASC, label ASC").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/bairros", methods=["POST"])
+def criar_bairro():
+    """Cria um novo bairro. Restrito à diretoria."""
+    data = request.get_json(force=True)
+    if not _requer_diretoria(data.get("requester")):
+        return jsonify({"error": "Acesso restrito à diretoria."}), 403
+
+    label = (data.get("label") or "").strip()
+    if not label:
+        return jsonify({"error": "O nome do bairro é obrigatório."}), 400
+
+    # Gera chave interna a partir do label (minúsculas, sem acentos, sem espaços)
+    import unicodedata, re
+    chave = data.get("chave") or unicodedata.normalize("NFD", label.lower())
+    chave = re.sub(r"[\u0300-\u036f]", "", chave)   # remove acentos
+    chave = re.sub(r"[^a-z0-9]", "", chave)          # só alfanumérico
+    if not chave:
+        return jsonify({"error": "Não foi possível gerar uma chave válida para esse nome."}), 400
+
+    db = get_db()
+    if db.execute("SELECT 1 FROM bairros WHERE chave = ?", (chave,)).fetchone():
+        return jsonify({"error": f"Já existe um bairro com a chave '{chave}'."}), 409
+
+    ordem = db.execute("SELECT COALESCE(MAX(ordem), 0) + 1 FROM bairros").fetchone()[0]
+    db.execute("INSERT INTO bairros (chave, label, ordem) VALUES (?, ?, ?)", (chave, label, ordem))
+
+    log_id = new_id()
+    db.execute(
+        """INSERT INTO logs_auditoria (id, data_iso, data_str, usuario, bairro, modulo, acao, alvo, campo, valor_anterior, valor_novo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (log_id, datetime.now().isoformat(), now_str(), data.get("requester"), None,
+         "Bairros", "criar", label, "chave", None, chave),
+    )
+    db.commit()
+    return jsonify({"chave": chave, "label": label, "ordem": ordem}), 201
+
+
+@app.route("/api/bairros/<chave>", methods=["PUT"])
+def editar_bairro(chave):
+    """Renomeia o label de um bairro existente. Restrito à diretoria."""
+    data = request.get_json(force=True)
+    if not _requer_diretoria(data.get("requester")):
+        return jsonify({"error": "Acesso restrito à diretoria."}), 403
+
+    novo_label = (data.get("label") or "").strip()
+    if not novo_label:
+        return jsonify({"error": "O nome do bairro é obrigatório."}), 400
+
+    db = get_db()
+    bairro = db.execute("SELECT * FROM bairros WHERE chave = ?", (chave,)).fetchone()
+    if not bairro:
+        return jsonify({"error": "Bairro não encontrado."}), 404
+
+    db.execute("UPDATE bairros SET label = ? WHERE chave = ?", (novo_label, chave))
+    log_id = new_id()
+    db.execute(
+        """INSERT INTO logs_auditoria (id, data_iso, data_str, usuario, bairro, modulo, acao, alvo, campo, valor_anterior, valor_novo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (log_id, datetime.now().isoformat(), now_str(), data.get("requester"), None,
+         "Bairros", "renomear", chave, "label", bairro["label"], novo_label),
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/bairros/<chave>", methods=["DELETE"])
+def deletar_bairro(chave):
+    """Remove um bairro. Restrito à diretoria.
+    Não remove pacientes/tarefas vinculados — apenas desvincula o bairro do sistema."""
+    data = request.get_json(force=True)
+    if not _requer_diretoria(data.get("requester")):
+        return jsonify({"error": "Acesso restrito à diretoria."}), 403
+
+    db = get_db()
+    bairro = db.execute("SELECT * FROM bairros WHERE chave = ?", (chave,)).fetchone()
+    if not bairro:
+        return jsonify({"error": "Bairro não encontrado."}), 404
+
+    # Verifica se há pacientes ou usuários ainda vinculados
+    n_pacientes = db.execute("SELECT COUNT(*) FROM pacientes WHERE bairro = ?", (chave,)).fetchone()[0]
+    n_usuarios = db.execute("SELECT COUNT(*) FROM usuarios WHERE bairro = ?", (chave,)).fetchone()[0]
+    if n_pacientes > 0 or n_usuarios > 0:
+        return jsonify({
+            "error": f"Não é possível remover: há {n_pacientes} paciente(s) e {n_usuarios} usuário(s) vinculados a este bairro."
+        }), 409
+
+    db.execute("DELETE FROM bairros WHERE chave = ?", (chave,))
+    log_id = new_id()
+    db.execute(
+        """INSERT INTO logs_auditoria (id, data_iso, data_str, usuario, bairro, modulo, acao, alvo, campo, valor_anterior, valor_novo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (log_id, datetime.now().isoformat(), now_str(), data.get("requester"), None,
+         "Bairros", "excluir", chave, "label", bairro["label"], None),
+    )
+    db.commit()
+    return jsonify({"ok": True})
 
 
 # ==================================================================

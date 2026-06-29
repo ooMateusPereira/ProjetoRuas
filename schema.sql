@@ -4,6 +4,14 @@
 
 PRAGMA foreign_keys = ON;
 
+-- Bairros/equipes de atuação (gerenciável pela diretoria via interface)
+CREATE TABLE IF NOT EXISTS bairros (
+    chave TEXT PRIMARY KEY,   -- identificador interno sem acento/espaço (ex: largodomacho)
+    label TEXT NOT NULL,      -- nome de exibição (ex: Largo do Machio)
+    ordem INTEGER DEFAULT 0,  -- ordem de exibição nas listas
+    criado_em TEXT DEFAULT (datetime('now'))
+);
+
 -- Usuários do sistema e controle de senhas
 CREATE TABLE IF NOT EXISTS usuarios (
     username TEXT PRIMARY KEY,
